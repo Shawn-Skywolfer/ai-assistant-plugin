@@ -399,6 +399,11 @@
       { type:'function', function:{ name:'toggleStart', description:'Start/stop timer', parameters:{type:'object',properties:{},required:[]} }},
       { type:'function', function:{ name:'showAddTaskBar', description:'Show add task bar', parameters:{type:'object',properties:{},required:[]} }},
       { type:'function', function:{ name:'setActiveWorkContext', description:'Switch to project/tag', parameters:{ type:'object', properties:{ contextId:{type:'string'} }, required:['contextId'] }}},
+      { type:'function', function:{ name:'addTaskToday', description:'Create a task due today. Shortcut for addTask with dueDay=today.', parameters:{ type:'object', properties:{
+        title:{type:'string',description:'Task title'}, notes:{type:'string',description:'Notes'},
+        projectId:{type:'string',description:'Project ID'}, tagIds:{type:'array',items:{type:'string'},description:'Tag IDs'},
+        timeEstimate:{type:'number',description:'Time estimate in ms'}
+      }, required:['title'] }}},
     ];
 
     // ==================== SYSTEM PROMPT ====================
@@ -424,6 +429,7 @@
           case 'toggleStart': PluginAPI.dispatchAction({type:'[Task] ToggleStart'}); return {success:true};
           case 'showAddTaskBar': PluginAPI.dispatchAction({type:'[Layout] ShowAddTaskBar'}); return {success:true};
           case 'setActiveWorkContext': PluginAPI.dispatchAction({type:'[WorkContext] SetActiveWorkContext',activeId:args.contextId}); return {success:true};
+          case 'addTaskToday': var td=new Date().toISOString().slice(0,10); var ad={title:args.title,dueDay:td}; if(args.notes)ad.notes=args.notes; if(args.projectId)ad.projectId=args.projectId; if(args.tagIds)ad.tagIds=args.tagIds; if(args.timeEstimate)ad.timeEstimate=args.timeEstimate; return {success:true,taskId:await PluginAPI.addTask(ad),dueDay:td};
           default: return {error:'Unknown tool: '+name};
         }
       } catch (e) { return {error:e.message||String(e)}; }
