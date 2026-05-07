@@ -44,13 +44,25 @@ Supports any OpenAI-compatible API (DeepSeek, Claude via proxy, local models, et
 ## Development
 
 ```
-packages/
 ├── manifest.json        # Plugin metadata
-├── config-schema.json   # Config schema for host UI
 ├── plugin.js            # Background: register buttons/shortcuts
-├── index.html           # Chat UI + OpenAI integration
+├── index.html           # Chat UI + OpenAI integration (all inline)
 └── icon.svg             # Plugin icon
 ```
+
+### Build / Package
+
+```bash
+cd ~/server/ai-assistant-plugin && python3 -c "
+import zipfile
+with zipfile.ZipFile('ai-assistant-plugin.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+    for f in ['manifest.json', 'plugin.js', 'index.html', 'icon.svg']:
+        zf.write(f, f)
+        print(f'  added: {f}')
+"
+```
+
+Output: `ai-assistant-plugin.zip` in the project root.
 
 ## Requirements
 
