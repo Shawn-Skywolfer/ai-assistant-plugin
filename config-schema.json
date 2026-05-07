@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Assistant Configuration",
+  "description": "Configure your AI Assistant powered by OpenAI-compatible API",
+  "type": "object",
+  "properties": {
+    "apiKey": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your OpenAI API key (sk-...)",
+      "minLength": 1
+    },
+    "baseUrl": {
+      "type": "string",
+      "title": "API Base URL",
+      "description": "Base URL for OpenAI-compatible API (include /v1 if needed)",
+      "default": "https://api.openai.com/v1"
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "Model name to use (e.g. gpt-4o, gpt-4o-mini, claude-3-5-sonnet)",
+      "default": "gpt-4o"
+    },
+    "maxTokens": {
+      "type": "number",
+      "title": "Max Tokens",
+      "description": "Maximum tokens in the response",
+      "minimum": 256,
+      "maximum": 16384,
+      "default": 4096
+    },
+    "temperature": {
+      "type": "number",
+      "title": "Temperature",
+      "description": "Response creativity (0 = deterministic, 1 = creative)",
+      "minimum": 0,
+      "maximum": 2,
+      "default": 0.7
+    },
+    "systemPrompt": {
+      "type": "string",
+      "title": "Custom System Prompt",
+      "description": "Additional instructions for the AI (optional). The base system prompt is always included.",
+      "default": ""
+    },
+    "maxToolRounds": {
+      "type": "integer",
+      "title": "Max Tool Rounds",
+      "description": "Maximum number of tool call rounds per message (prevents infinite loops)",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5
+    },
+    "contextTaskLimit": {
+      "type": "integer",
+      "title": "Context Task Limit",
+      "description": "Maximum number of active tasks to include in context",
+      "minimum": 5,
+      "maximum": 100,
+      "default": 30
+    }
+  },
+  "required": ["apiKey"]
+}

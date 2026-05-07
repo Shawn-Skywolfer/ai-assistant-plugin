@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --chat-bg: var(--bg, #1a1a2e);
+      --chat-surface: var(--card-bg, #16213e);
+      --chat-border: var(--divider-color, rgba(255,255,255,0.08));
+      --chat-text: var(--text-color, #e0e0e0);
+      --chat-text-muted: var(--text-color-muted, #888);
+      --chat-primary: var(--c-primary, #4fc3f7);
+      --chat-accent: var(--c-accent, #81c784);
+      --chat-warn: var(--c-warn, #ffb74d);
+      --chat-user-bg: var(--c-primary, #4fc3f7);
+      --chat-user-text: #fff;
+      --chat-bot-bg: var(--card-bg, #1e2a4a);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--chat-bg); color: var(--chat-text);
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; border-bottom: 1px solid var(--chat-border);
+      background: var(--chat-surface); flex-shrink: 0;
+    }
+    .header-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .header-title svg { width: 18px; height: 18px; color: var(--chat-primary); }
+    .header-actions { display: flex; gap: 4px; }
+    .header-actions button {
+      background: none; border: none; color: var(--chat-text-muted);
+      cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 12px;
+    }
+    .header-actions button:hover { color: var(--chat-text); background: rgba(255,255,255,0.05); }
+    .chat-container { flex: 1; overflow-y: auto; padding: 12px; scroll-behavior: smooth; }
+    .welcome { text-align: center; padding: 40px 20px; color: var(--chat-text-muted); }
+    .welcome-icon { font-size: 48px; margin-bottom: 12px; }
+    .welcome h3 { font-size: 16px; color: var(--chat-text); margin-bottom: 8px; }
+    .welcome p { font-size: 13px; line-height: 1.5; }
+    .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 16px; }
+    .quick-action {
+      background: var(--chat-surface); border: 1px solid var(--chat-border);
+      color: var(--chat-primary); padding: 6px 12px; border-radius: 16px;
+      font-size: 12px; cursor: pointer; transition: all 0.15s;
+    }
+    .quick-action:hover { background: var(--chat-primary); color: #fff; border-color: var(--chat-primary); }
+    .message { margin-bottom: 12px; display: flex; flex-direction: column; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .message.user { align-items: flex-end; }
+    .message.assistant { align-items: flex-start; }
+    .msg-bubble {
+      max-width: 85%; padding: 10px 14px; border-radius: 12px;
+      font-size: 13px; line-height: 1.5; word-break: break-word; white-space: pre-wrap;
+    }
+    .message.user .msg-bubble { background: var(--chat-user-bg); color: var(--chat-user-text); border-bottom-right-radius: 4px; }
+    .message.assistant .msg-bubble { background: var(--chat-bot-bg); border: 1px solid var(--chat-border); border-bottom-left-radius: 4px; }
+    .msg-time { font-size: 10px; color: var(--chat-text-muted); margin-top: 3px; padding: 0 4px; }
+    .action-cards { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-width: 85%; }
+    .action-card {
+      display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+      background: rgba(79,195,247,0.08); border: 1px solid rgba(79,195,247,0.15);
+      border-radius: 8px; font-size: 11px; color: var(--chat-text-muted);
+    }
+    .action-card .action-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+    .action-card.success .action-icon { color: var(--chat-accent); }
+    .action-card.error .action-icon { color: var(--chat-warn); }
+    .action-card .action-name { font-weight: 600; color: var(--chat-primary); }
+    .action-card .action-detail { color: var(--chat-text-muted); }
+    .thinking {
+      display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+      background: var(--chat-bot-bg); border: 1px solid var(--chat-border);
+      border-radius: 12px; border-bottom-left-radius: 4px;
+      font-size: 13px; color: var(--chat-text-muted); max-width: 85%;
+    }
+    .thinking-dots { display: flex; gap: 3px; }
+    .thinking-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--chat-primary); animation: bounce 1.2s infinite; }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,60%,100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+    .input-area {
+      display: flex; align-items: flex-end; gap: 8px; padding: 10px 12px;
+      border-top: 1px solid var(--chat-border); background: var(--chat-surface); flex-shrink: 0;
+    }
+    .input-area textarea {
+      flex: 1; background: var(--chat-bg); border: 1px solid var(--chat-border);
+      border-radius: 10px; padding: 10px 12px; color: var(--chat-text);
+      font-size: 13px; font-family: inherit; resize: none;
+      min-height: 40px; max-height: 120px; outline: none; line-height: 1.4;
+    }
+    .input-area textarea:focus { border-color: var(--chat-primary); }
+    .input-area textarea::placeholder { color: var(--chat-text-muted); }
+    .send-btn {
+      width: 40px; height: 40px; border-radius: 50%; border: none;
+      background: var(--chat-primary); color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .send-btn svg { width: 18px; height: 18px; }
+    .error-banner {
+      padding: 8px 12px; background: rgba(255,87,34,0.15);
+      border: 1px solid rgba(255,87,34,0.3); color: var(--chat-warn);
+      font-size: 12px; text-align: center; cursor: pointer;
+    }
+    .error-banner:hover { background: rgba(255,87,34,0.25); }
+    .config-warning { text-align: center; padding: 40px 20px; }
+    .config-warning h3 { font-size: 16px; margin-bottom: 8px; }
+    .config-warning p { font-size: 13px; color: var(--chat-text-muted); line-height: 1.5; }
+    .config-warning .setup-btn {
+      margin-top: 16px; padding: 10px 24px; background: var(--chat-primary);
+      color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
+    }
+
+    /* Settings modal */
+    .settings-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .settings-overlay.hidden { display: none; }
+    .settings-panel {
+      background: var(--chat-surface); border: 1px solid var(--chat-border);
+      border-radius: 12px; padding: 20px; width: 90%; max-width: 360px;
+      max-height: 80vh; overflow-y: auto;
+    }
+    .settings-panel h3 { font-size: 15px; margin-bottom: 16px; }
+    .settings-field { margin-bottom: 12px; }
+    .settings-field label { display: block; font-size: 12px; color: var(--chat-text-muted); margin-bottom: 4px; }
+    .settings-field input, .settings-field select {
+      width: 100%; padding: 8px 10px; background: var(--chat-bg);
+      border: 1px solid var(--chat-border); border-radius: 6px;
+      color: var(--chat-text); font-size: 13px; font-family: inherit; outline: none;
+    }
+    .settings-field input:focus, .settings-field select:focus { border-color: var(--chat-primary); }
+    .settings-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .settings-actions button {
+      padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none;
+    }
+    .btn-cancel { background: var(--chat-bg); color: var(--chat-text); border: 1px solid var(--chat-border) !important; }
+    .btn-save { background: var(--chat-primary); color: #fff; }
+    .model-info { font-size: 11px; color: var(--chat-text-muted); margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+        <rect x="4" y="8" width="16" height="12" rx="3"/>
+        <circle cx="9" cy="14" r="1.5" fill="currentColor"/>
+        <circle cx="15" cy="14" r="1.5" fill="currentColor"/>
+      </svg>
+      AI Assistant
+      <span id="model-badge" style="font-size:10px;color:var(--chat-text-muted);font-weight:400;"></span>
+    </div>
+    <div class="header-actions">
+      <button id="settings-btn" title="Settings">⚙️</button>
+      <button id="clear-btn" title="Clear conversation">Clear</button>
+    </div>
+  </div>
+
+  <div id="chat-container" class="chat-container"></div>
+
+  <div class="input-area">
+    <textarea id="input" placeholder="Ask me anything about your tasks..." rows="1"></textarea>
+    <button id="send-btn" class="send-btn" title="Send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-overlay" class="settings-overlay hidden">
+    <div class="settings-panel">
+      <h3>⚙️ AI Assistant Settings</h3>
+      <div class="settings-field">
+        <label>API Key *</label>
+        <input type="password" id="cfg-apiKey" placeholder="sk-..." />
+      </div>
+      <div class="settings-field">
+        <label>Base URL</label>
+        <input type="text" id="cfg-baseUrl" placeholder="https://api.openai.com/v1" />
+        <div class="model-info">OpenAI-compatible endpoint (include /v1 if needed)</div>
+      </div>
+      <div class="settings-field">
+        <label>Model</label>
+        <input type="text" id="cfg-model" placeholder="gpt-4o" />
+      </div>
+      <div class="settings-field">
+        <label>Max Tokens</label>
+        <input type="number" id="cfg-maxTokens" placeholder="4096" min="256" max="16384" />
+      </div>
+      <div class="settings-field">
+        <label>Temperature</label>
+        <input type="number" id="cfg-temperature" placeholder="0.7" min="0" max="2" step="0.1" />
+      </div>
+      <div class="settings-actions">
+        <button class="btn-cancel" id="settings-cancel">Cancel</button>
+        <button class="btn-save" id="settings-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== STATE ====================
+    var CONFIG_KEY = 'ai-assistant-config';
+    var CONV_KEY = 'ai-assistant-conversation';
+    var config = null;
+    var messages = [];
+    var isProcessing = false;
+    var currentTaskId = null;
+
+    // ==================== CONFIG PERSISTENCE ====================
+    async function loadConfig() {
+      try {
+        var raw = await PluginAPI.loadSyncedData();
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed[CONFIG_KEY]) {
+            config = parsed[CONFIG_KEY];
+            console.log('[AI] Config loaded, model:', config.model);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.error('[AI] loadConfig error:', e);
+      }
+      config = null;
+      return false;
+    }
+
+    async function saveConfig(cfg) {
+      config = cfg;
+      try {
+        // Load existing data to preserve conversation
+        var raw = await PluginAPI.loadSyncedData();
+        var data = {};
+        if (raw) { try { data = JSON.parse(raw); } catch(e) {} }
+        data[CONFIG_KEY] = cfg;
+        await PluginAPI.persistDataSynced(JSON.stringify(data));
+        console.log('[AI] Config saved');
+        updateModelBadge();
+      } catch (e) {
+        console.error('[AI] saveConfig error:', e);
+      }
+    }
+
+    async function loadConversation() {
+      try {
+        var raw = await PluginAPI.loadSyncedData();
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed[CONV_KEY] && parsed[CONV_KEY].length > 0) {
+            messages = parsed[CONV_KEY];
+            var container = document.getElementById('chat-container');
+            container.innerHTML = '';
+            for (var i = 0; i < messages.length; i++) {
+              var m = messages[i];
+              if (m.role === 'user') {
+                var text = m.content.split('\n\n---\n[App Context]')[0];
+                displayMessage('user', text);
+              } else if (m.role === 'assistant' && m.content) {
+                displayMessage('assistant', m.content);
+              }
+            }
+            return true;
+          }
+        }
+      } catch (e) { console.error('[AI] loadConversation error:', e); }
+      return false;
+    }
+
+    async function saveConversation() {
+      try {
+        var raw = await PluginAPI.loadSyncedData();
+        var data = {};
+        if (raw) { try { data = JSON.parse(raw); } catch(e) {} }
+        data[CONV_KEY] = messages.slice(-50);
+        await PluginAPI.persistDataSynced(JSON.stringify(data));
+      } catch (e) { console.warn('[AI] saveConversation error:', e); }
+    }
+
+    // ==================== SETTINGS UI ====================
+    function openSettings() {
+      document.getElementById('cfg-apiKey').value = (config && config.apiKey) || '';
+      document.getElementById('cfg-baseUrl').value = (config && config.baseUrl) || 'https://api.openai.com/v1';
+      document.getElementById('cfg-model').value = (config && config.model) || 'gpt-4o';
+      document.getElementById('cfg-maxTokens').value = (config && config.maxTokens) || 4096;
+      document.getElementById('cfg-temperature').value = (config && config.temperature !== undefined) ? config.temperature : 0.7;
+      document.getElementById('settings-overlay').classList.remove('hidden');
+    }
+
+    function closeSettings() {
+      document.getElementById('settings-overlay').classList.add('hidden');
+    }
+
+    function doSaveSettings() {
+      var cfg = {
+        apiKey: document.getElementById('cfg-apiKey').value.trim(),
+        baseUrl: document.getElementById('cfg-baseUrl').value.trim() || 'https://api.openai.com/v1',
+        model: document.getElementById('cfg-model').value.trim() || 'gpt-4o',
+        maxTokens: parseInt(document.getElementById('cfg-maxTokens').value) || 4096,
+        temperature: parseFloat(document.getElementById('cfg-temperature').value),
+      };
+      if (isNaN(cfg.temperature)) cfg.temperature = 0.7;
+
+      if (!cfg.apiKey) {
+        alert('API Key is required');
+        return;
+      }
+
+      saveConfig(cfg);
+      closeSettings();
+
+      // Refresh the view
+      var container = document.getElementById('chat-container');
+      if (messages.length > 0) {
+        // Already have conversation
+      } else {
+        showWelcome();
+      }
+      showSnack('Settings saved!');
+    }
+
+    function updateModelBadge() {
+      var badge = document.getElementById('model-badge');
+      if (config && config.model) {
+        badge.textContent = '(' + config.model + ')';
+      } else {
+        badge.textContent = '';
+      }
+    }
+
+    // ==================== TOOL DEFINITIONS ====================
+    var tools = [
+      { type:'function', function:{ name:'getTasks', description:'Get all active tasks', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'getArchivedTasks', description:'Get archived tasks', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'getCurrentContextTasks', description:'Get current context tasks', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'addTask', description:'Create a new task', parameters:{ type:'object', properties:{
+        title:{type:'string',description:'Task title'}, notes:{type:'string',description:'Notes'},
+        projectId:{type:'string',description:'Project ID'}, tagIds:{type:'array',items:{type:'string'},description:'Tag IDs'},
+        timeEstimate:{type:'number',description:'Time estimate in ms'}, isDone:{type:'boolean'},
+        parentId:{type:'string',description:'Parent task ID for subtask'}, dueDay:{type:'string',description:'Due date YYYY-MM-DD'}
+      }, required:['title']}}},
+      { type:'function', function:{ name:'updateTask', description:'Update a task', parameters:{ type:'object', properties:{
+        taskId:{type:'string'}, title:{type:'string'}, notes:{type:'string'}, isDone:{type:'boolean'},
+        timeEstimate:{type:'number'}, dueDay:{type:'string'}, projectId:{type:'string'}, tagIds:{type:'array',items:{type:'string'}}
+      }, required:['taskId']}}},
+      { type:'function', function:{ name:'deleteTask', description:'Delete a task', parameters:{ type:'object', properties:{ taskId:{type:'string'} }, required:['taskId'] }}},
+      { type:'function', function:{ name:'getAllProjects', description:'Get all projects', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'addProject', description:'Create project', parameters:{ type:'object', properties:{ title:{type:'string'} }, required:['title'] }}},
+      { type:'function', function:{ name:'updateProject', description:'Update project', parameters:{ type:'object', properties:{ projectId:{type:'string'}, title:{type:'string'} }, required:['projectId'] }}},
+      { type:'function', function:{ name:'getAllTags', description:'Get all tags', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'addTag', description:'Create tag', parameters:{ type:'object', properties:{ title:{type:'string'}, color:{type:'string'} }, required:['title'] }}},
+      { type:'function', function:{ name:'updateTag', description:'Update tag', parameters:{ type:'object', properties:{ tagId:{type:'string'}, title:{type:'string'}, color:{type:'string'} }, required:['tagId'] }}},
+      { type:'function', function:{ name:'setCurrentTask', description:'Set task as current/active', parameters:{ type:'object', properties:{ taskId:{type:'string'} }, required:['taskId'] }}},
+      { type:'function', function:{ name:'toggleStart', description:'Start/stop timer', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'showAddTaskBar', description:'Show add task bar', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'setActiveWorkContext', description:'Switch to project/tag', parameters:{ type:'object', properties:{ contextId:{type:'string'} }, required:['contextId'] }}},
+    ];
+
+    // ==================== SYSTEM PROMPT ====================
+    var BASE_SYSTEM_PROMPT = 'You are an AI assistant integrated into Super Productivity, a task management app.\nYou can help users manage their tasks, projects, tags, and app state using the provided tools.\n\nRules:\n- Use tools to execute actions. Always confirm what you did.\n- Be concise. Match the user\'s language.\n- Prefer fetching tasks first to get IDs, then operate.\n- Summarize tool results human-friendly, don\'t dump raw JSON.\n- Time: 30min=1800000ms, 1h=3600000ms.\n- Current date: ' + new Date().toISOString().slice(0, 10);
+
+    // ==================== TOOL EXECUTION ====================
+    async function executeTool(name, args) {
+      try {
+        switch (name) {
+          case 'getTasks': return (await PluginAPI.getTasks()).map(function(t){ return {id:t.id,title:t.title,isDone:t.isDone,projectId:t.projectId,tagIds:t.tagIds,dueDay:t.dueDay,timeEstimate:t.timeEstimate,notes:t.notes?t.notes.slice(0,200):null,subTaskIds:t.subTaskIds}; });
+          case 'getArchivedTasks': return (await PluginAPI.getArchivedTasks()).slice(0,50).map(function(t){ return {id:t.id,title:t.title,isDone:t.isDone}; });
+          case 'getCurrentContextTasks': return (await PluginAPI.getCurrentContextTasks()).map(function(t){ return {id:t.id,title:t.title,isDone:t.isDone}; });
+          case 'addTask': var d={}; if(args.title)d.title=args.title; if(args.notes)d.notes=args.notes; if(args.projectId)d.projectId=args.projectId; if(args.tagIds)d.tagIds=args.tagIds; if(args.timeEstimate)d.timeEstimate=args.timeEstimate; if(args.isDone!==undefined)d.isDone=args.isDone; if(args.parentId)d.parentId=args.parentId; if(args.dueDay)d.dueDay=args.dueDay; return {success:true,taskId:await PluginAPI.addTask(d)};
+          case 'updateTask': var u={}; if(args.title!==undefined)u.title=args.title; if(args.notes!==undefined)u.notes=args.notes; if(args.isDone!==undefined)u.isDone=args.isDone; if(args.timeEstimate!==undefined)u.timeEstimate=args.timeEstimate; if(args.dueDay!==undefined)u.dueDay=args.dueDay; if(args.projectId!==undefined)u.projectId=args.projectId; if(args.tagIds!==undefined)u.tagIds=args.tagIds; await PluginAPI.updateTask(args.taskId,u); return {success:true};
+          case 'deleteTask': await PluginAPI.deleteTask(args.taskId); return {success:true};
+          case 'getAllProjects': return (await PluginAPI.getAllProjects()).map(function(p){ return {id:p.id,title:p.title,taskCount:p.taskIds?p.taskIds.length:0}; });
+          case 'addProject': return {success:true,projectId:await PluginAPI.addProject({title:args.title})};
+          case 'updateProject': await PluginAPI.updateProject(args.projectId,{title:args.title}); return {success:true};
+          case 'getAllTags': return (await PluginAPI.getAllTags()).map(function(t){ return {id:t.id,title:t.title,color:t.color}; });
+          case 'addTag': return {success:true,tagId:await PluginAPI.addTag({title:args.title,color:args.color})};
+          case 'updateTag': await PluginAPI.updateTag(args.tagId,{title:args.title,color:args.color}); return {success:true};
+          case 'setCurrentTask': PluginAPI.dispatchAction({type:'[Task] SetCurrentTask',payload:{task:{id:args.taskId}}}); currentTaskId=args.taskId; return {success:true};
+          case 'toggleStart': PluginAPI.dispatchAction({type:'[Task] ToggleStart'}); return {success:true};
+          case 'showAddTaskBar': PluginAPI.dispatchAction({type:'[Layout] ShowAddTaskBar'}); return {success:true};
+          case 'setActiveWorkContext': PluginAPI.dispatchAction({type:'[WorkContext] SetActiveWorkContext',activeId:args.contextId}); return {success:true};
+          default: return {error:'Unknown tool: '+name};
+        }
+      } catch (e) { return {error:e.message||String(e)}; }
+    }
+
+    // ==================== CONTEXT ====================
+    async function buildContext() {
+      try {
+        var tasks = await PluginAPI.getCurrentContextTasks();
+        var projects = await PluginAPI.getAllProjects();
+        var tags = await PluginAPI.getAllTags();
+        var active = tasks.filter(function(t){return !t.isDone;}).slice(0,30);
+        var cur = currentTaskId ? tasks.find(function(t){return t.id===currentTaskId;}) : null;
+        return JSON.stringify({
+          currentDate:new Date().toISOString().slice(0,10), currentTime:new Date().toLocaleTimeString(),
+          currentTask:cur?{id:cur.id,title:cur.title}:null,
+          stats:{total:tasks.length,active:active.length},
+          activeTasks:active.map(function(t){return{id:t.id,title:t.title,dueDay:t.dueDay,timeEstimate:t.timeEstimate};}),
+          projects:projects.map(function(p){return{id:p.id,title:p.title,taskCount:p.taskIds?p.taskIds.length:0};}),
+          tags:tags.map(function(t){return{id:t.id,title:t.title};}),
+        });
+      } catch(e) { return '{"error":"'+e.message+'"}'; }
+    }
+
+    // ==================== OPENAI API ====================
+    async function callOpenAI(msgs) {
+      var baseUrl = (config.baseUrl||'https://api.openai.com/v1').replace(/\/+$/,'');
+      var sys = BASE_SYSTEM_PROMPT;
+      var full = [{role:'system',content:sys}].concat(msgs);
+      var resp = await fetch(baseUrl+'/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+config.apiKey},
+        body:JSON.stringify({model:config.model||'gpt-4o',messages:full,tools:tools,tool_choice:'auto',max_tokens:config.maxTokens||4096,temperature:config.temperature!==undefined?config.temperature:0.7})
+      });
+      if(!resp.ok){var t=await resp.text(); throw new Error('API '+resp.status+': '+t.slice(0,300));}
+      var data=await resp.json();
+      if(data.error) throw new Error(data.error.message||JSON.stringify(data.error));
+      return data;
+    }
+
+    // ==================== CHAT ====================
+    async function sendMessage(userText) {
+      if (!userText.trim() || isProcessing) return;
+      if (!config || !config.apiKey) { showConfigWarning(); return; }
+
+      isProcessing = true; updateSendBtn();
+      displayMessage('user', userText);
+
+      var ctx = await buildContext();
+      messages.push({role:'user',content:userText+'\n\n---\n[App Context]\n'+ctx});
+
+      var thinkingEl = showThinking();
+      try {
+        var maxRounds = 5, round = 0;
+        var response = await callOpenAI(messages);
+        var allActions = [];
+        while (round < maxRounds) {
+          var choice = response.choices && response.choices[0];
+          if (!choice) throw new Error('No response');
+          var am = choice.message;
+          if (am.tool_calls && am.tool_calls.length > 0) {
+            messages.push({role:'assistant',content:am.content||null,tool_calls:am.tool_calls});
+            for (var i=0;i<am.tool_calls.length;i++) {
+              var tc=am.tool_calls[i], args={};
+              try{args=JSON.parse(tc.function.arguments);}catch(e){}
+              var result=await executeTool(tc.function.name,args);
+              allActions.push({name:tc.function.name,args:args,result:result});
+              messages.push({role:'tool',tool_call_id:tc.id,content:JSON.stringify(result).slice(0,6000)});
+            }
+            response=await callOpenAI(messages); round++;
+          } else {
+            messages.push({role:'assistant',content:am.content});
+            removeThinking(thinkingEl);
+            if(allActions.length>0) displayActions(allActions);
+            displayMessage('assistant',am.content||'(No response)');
+            break;
+          }
+        }
+        if(round>=maxRounds){removeThinking(thinkingEl);if(allActions.length>0)displayActions(allActions);displayMessage('assistant','⚠️ Max rounds reached.');}
+      } catch(e) { removeThinking(thinkingEl); displayError(e.message); }
+      isProcessing=false; updateSendBtn(); saveConversation();
+    }
+
+    // ==================== UI ====================
+    function displayMessage(role,text) {
+      var c=document.getElementById('chat-container');
+      var w=c.querySelector('.welcome'); if(w)w.remove();
+      var d=document.createElement('div'); d.className='message '+role;
+      var b=document.createElement('div'); b.className='msg-bubble'; b.textContent=text; d.appendChild(b);
+      var t=document.createElement('div'); t.className='msg-time'; t.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); d.appendChild(t);
+      c.appendChild(d); c.scrollTop=c.scrollHeight;
+    }
+    function displayActions(actions) {
+      var c=document.getElementById('chat-container');
+      var d=document.createElement('div'); d.className='action-cards message assistant';
+      for(var i=0;i<actions.length;i++){var a=actions[i];
+        var card=document.createElement('div'); card.className='action-card '+(a.result.error?'error':'success');
+        var ic=document.createElement('span'); ic.className='action-icon'; ic.textContent=a.result.error?'✗':'✓';
+        var n=document.createElement('span'); n.className='action-name'; n.textContent=a.name;
+        var dt=document.createElement('span'); dt.className='action-detail'; dt.textContent=a.args.title||a.args.taskId?(a.args.title||a.args.taskId.slice(0,8)+'...'):'';
+        card.appendChild(ic);card.appendChild(n);card.appendChild(dt);d.appendChild(card);
+      }
+      c.appendChild(d); c.scrollTop=c.scrollHeight;
+    }
+    function displayError(msg) {
+      var c=document.getElementById('chat-container');
+      var d=document.createElement('div'); d.className='error-banner'; d.textContent='⚠ '+msg;
+      d.onclick=function(){d.remove();}; c.appendChild(d); c.scrollTop=c.scrollHeight;
+    }
+    function showThinking() {
+      var c=document.getElementById('chat-container');
+      var d=document.createElement('div'); d.className='message assistant';
+      d.innerHTML='<div class="thinking"><div class="thinking-dots"><span></span><span></span><span></span></div>Thinking...</div>';
+      c.appendChild(d); c.scrollTop=c.scrollHeight; return d;
+    }
+    function removeThinking(el){if(el&&el.parentNode)el.parentNode.removeChild(el);}
+    function showWelcome() {
+      document.getElementById('chat-container').innerHTML=
+        '<div class="welcome"><div class="welcome-icon">🤖</div><h3>AI Assistant</h3>'+
+        '<p>I can help manage tasks, projects, and tags.<br>Tell me what you need!</p>'+
+        '<div class="quick-actions">'+
+        '<button class="quick-action" onclick="quickSend(\'Show me my tasks\')">📋 My tasks</button>'+
+        '<button class="quick-action" onclick="quickSend(\'What should I focus on today?\')">🎯 Focus today</button>'+
+        '<button class="quick-action" onclick="quickSend(\'Create a task: \')">➕ New task</button>'+
+        '<button class="quick-action" onclick="quickSend(\'Show my projects\')">📁 Projects</button>'+
+        '</div></div>';
+    }
+    function showConfigWarning() {
+      document.getElementById('chat-container').innerHTML=
+        '<div class="config-warning"><div class="welcome-icon">⚙️</div><h3>Configuration Required</h3>'+
+        '<p>Click the ⚙️ button in the top-right corner to configure your API key.</p></div>';
+    }
+    function showSnack(msg) {
+      var c=document.getElementById('chat-container');
+      var d=document.createElement('div'); d.className='action-card success'; d.style.cssText='max-width:100%;justify-content:center;margin:8px 0;';
+      d.innerHTML='<span class="action-icon">✓</span><span>'+msg+'</span>';
+      c.appendChild(d); setTimeout(function(){d.remove();},3000);
+    }
+    function quickSend(text) {
+      var input=document.getElementById('input'); input.value=text; input.focus(); autoResize();
+      if(text.endsWith(': ')||text.endsWith(':')){} else {sendMessage(text);input.value='';autoResize();}
+    }
+    function autoResize() {
+      var i=document.getElementById('input'); i.style.height='auto'; i.style.height=Math.min(i.scrollHeight,120)+'px';
+    }
+    function updateSendBtn(){document.getElementById('send-btn').disabled=isProcessing;}
+    function clearConversation(){messages=[];showWelcome();saveConversation();}
+
+    // ==================== INIT ====================
+    function setupEventListeners() {
+      var input=document.getElementById('input');
+      var sendBtn=document.getElementById('send-btn');
+      var clearBtn=document.getElementById('clear-btn');
+      var settingsBtn=document.getElementById('settings-btn');
+      var settingsSave=document.getElementById('settings-save');
+      var settingsCancel=document.getElementById('settings-cancel');
+
+      input.addEventListener('input',autoResize);
+      input.addEventListener('keydown',function(e){
+        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();var t=input.value;if(t.trim()){sendMessage(t);input.value='';autoResize();}}
+      });
+      sendBtn.addEventListener('click',function(){var t=input.value;if(t.trim()){sendMessage(t);input.value='';autoResize();}});
+      clearBtn.addEventListener('click',function(){if(confirm('Clear conversation?'))clearConversation();});
+      settingsBtn.addEventListener('click',openSettings);
+      settingsSave.addEventListener('click',doSaveSettings);
+      settingsCancel.addEventListener('click',closeSettings);
+      document.getElementById('settings-overlay').addEventListener('click',function(e){
+        if(e.target===this)closeSettings();
+      });
+    }
+
+    async function initPlugin() {
+      setupEventListeners();
+      var hasConfig = await loadConfig();
+      updateModelBadge();
+      if (!hasConfig) {
+        showConfigWarning();
+      } else {
+        var hasConv = await loadConversation();
+        if (!hasConv) showWelcome();
+      }
+    }
+
+    function waitForPlugin() {
+      if (typeof PluginAPI !== 'undefined') {
+        initPlugin();
+      } else {
+        setTimeout(waitForPlugin, 100);
+      }
+    }
+    waitForPlugin();
+  </script>
+</body>
+</html>
