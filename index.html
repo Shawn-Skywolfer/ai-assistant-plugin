@@ -55,8 +55,47 @@
     .message.assistant { align-items: flex-start; }
     .msg-bubble {
       max-width: 85%; padding: 10px 14px; border-radius: 12px;
-      font-size: 13px; line-height: 1.5; word-break: break-word; white-space: pre-wrap;
+      font-size: 13px; line-height: 1.5; word-break: break-word;
     }
+    .message.user .msg-bubble { white-space: pre-wrap; }
+    .message.assistant .msg-bubble { overflow-x: auto; }
+
+    /* Markdown styles */
+    .msg-bubble h1, .msg-bubble h2, .msg-bubble h3, .msg-bubble h4 { margin: 8px 0 4px; line-height: 1.3; }
+    .msg-bubble h1 { font-size: 16px; }
+    .msg-bubble h2 { font-size: 15px; }
+    .msg-bubble h3 { font-size: 14px; }
+    .msg-bubble h4 { font-size: 13px; }
+    .msg-bubble p { margin: 4px 0; }
+    .msg-bubble ul, .msg-bubble ol { margin: 4px 0; padding-left: 20px; }
+    .msg-bubble li { margin: 2px 0; }
+    .msg-bubble code {
+      background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px;
+    }
+    .msg-bubble pre {
+      background: rgba(0,0,0,0.3); border: 1px solid var(--chat-border);
+      border-radius: 6px; padding: 10px; margin: 6px 0; overflow-x: auto;
+    }
+    .msg-bubble pre code {
+      background: none; padding: 0; font-size: 12px; line-height: 1.4;
+    }
+    .msg-bubble blockquote {
+      border-left: 3px solid var(--chat-primary); padding-left: 10px;
+      margin: 6px 0; color: var(--chat-text-muted);
+    }
+    .msg-bubble table {
+      border-collapse: collapse; margin: 6px 0; font-size: 12px; width: 100%;
+    }
+    .msg-bubble th, .msg-bubble td {
+      border: 1px solid var(--chat-border); padding: 4px 8px; text-align: left;
+    }
+    .msg-bubble th { background: rgba(255,255,255,0.05); font-weight: 600; }
+    .msg-bubble a { color: var(--chat-primary); text-decoration: none; }
+    .msg-bubble a:hover { text-decoration: underline; }
+    .msg-bubble hr { border: none; border-top: 1px solid var(--chat-border); margin: 8px 0; }
+    .msg-bubble strong { font-weight: 600; }
+    .msg-bubble em { font-style: italic; }
     .message.user .msg-bubble { background: var(--chat-user-bg); color: var(--chat-user-text); border-bottom-right-radius: 4px; }
     .message.assistant .msg-bubble { background: var(--chat-bot-bg); border: 1px solid var(--chat-border); border-bottom-left-radius: 4px; }
     .msg-time { font-size: 10px; color: var(--chat-text-muted); margin-top: 3px; padding: 0 4px; }
@@ -468,12 +507,110 @@
       isProcessing=false; updateSendBtn(); saveConversation();
     }
 
+    // ==================== MARKDOWN RENDERER ====================
+    function escapeHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderMarkdown(md) {
+      // Extract code blocks first to protect them
+      var codeBlocks = [];
+      md = md.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
+        codeBlocks.push({ lang: lang, code: code });
+        return '%%CODEBLOCK_' + (codeBlocks.length - 1) + '%%';
+      });
+
+      // Protect inline code
+      var inlineCodes = [];
+      md = md.replace(/`([^`\n]+)`/g, function(_, code) {
+        inlineCodes.push(code);
+        return '%%INLINE_' + (inlineCodes.length - 1) + '%%';
+      });
+
+      // Headers
+      md = md.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+      md = md.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+      md = md.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+      md = md.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+      // Horizontal rules
+      md = md.replace(/^---+$/gm, '<hr>');
+
+      // Bold and italic
+      md = md.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+      md = md.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      md = md.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+      // Links
+      md = md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+      // Blockquotes
+      md = md.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+      md = md.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+
+      // Tables
+      md = md.replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)+)/gm, function(_, header, sep, body) {
+        var hCells = header.split('|').filter(function(c){return c.trim();});
+        var thead = '<tr>' + hCells.map(function(c){return '<th>'+c.trim()+'</th>';}).join('') + '</tr>';
+        var rows = body.trim().split('\n').map(function(row) {
+          var cells = row.split('|').filter(function(c){return c.trim();});
+          return '<tr>' + cells.map(function(c){return '<td>'+c.trim()+'</td>';}).join('') + '</tr>';
+        });
+        return '<table><thead>'+thead+'</thead><tbody>'+rows.join('')+'</tbody></table>';
+      });
+
+      // Unordered lists
+      md = md.replace(/^(?:- (.+)\n?)+/gm, function(match) {
+        var items = match.trim().split('\n').map(function(line) {
+          return '<li>' + line.replace(/^- /, '') + '</li>';
+        });
+        return '<ul>' + items.join('') + '</ul>';
+      });
+
+      // Ordered lists
+      md = md.replace(/^(?:\d+\. (.+)\n?)+/gm, function(match) {
+        var items = match.trim().split('\n').map(function(line) {
+          return '<li>' + line.replace(/^\d+\. /, '') + '</li>';
+        });
+        return '<ol>' + items.join('') + '</ol>';
+      });
+
+      // Paragraphs (double newline)
+      md = md.replace(/\n\n+/g, '</p><p>');
+      // Single newlines to <br> (but not inside tags)
+      md = md.replace(/\n/g, '<br>');
+
+      // Wrap in paragraph
+      md = '<p>' + md + '</p>';
+      // Clean empty paragraphs
+      md = md.replace(/<p>\s*<\/p>/g, '');
+      // Clean paragraphs wrapping block elements
+      md = md.replace(/<p>\s*(<h[1-4]|<ul|<ol|<table|<hr|<blockquote|<pre)/g, '$1');
+      md = md.replace(/(<\/h[1-4]>|<\/ul>|<\/ol>|<\/table>|<hr>|<\/blockquote>|<\/pre>)\s*<\/p>/g, '$1');
+
+      // Restore code blocks
+      md = md.replace(/%%CODEBLOCK_(\d+)%%/g, function(_, i) {
+        var cb = codeBlocks[parseInt(i)];
+        return '<pre><code>' + escapeHtml(cb.code.replace(/\n$/, '')) + '</code></pre>';
+      });
+
+      // Restore inline code
+      md = md.replace(/%%INLINE_(\d+)%%/g, function(_, i) {
+        return '<code>' + escapeHtml(inlineCodes[parseInt(i)]) + '</code>';
+      });
+
+      return md;
+    }
+
     // ==================== UI ====================
     function displayMessage(role,text) {
       var c=document.getElementById('chat-container');
       var w=c.querySelector('.welcome'); if(w)w.remove();
       var d=document.createElement('div'); d.className='message '+role;
-      var b=document.createElement('div'); b.className='msg-bubble'; b.textContent=text; d.appendChild(b);
+      var b=document.createElement('div'); b.className='msg-bubble';
+      if (role === 'assistant') { b.innerHTML = renderMarkdown(text); }
+      else { b.textContent = text; }
+      d.appendChild(b);
       var t=document.createElement('div'); t.className='msg-time'; t.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); d.appendChild(t);
       c.appendChild(d); c.scrollTop=c.scrollHeight;
     }
