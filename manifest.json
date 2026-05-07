@@ -32,6 +32,5 @@
   "iFrame": true,
   "sidePanel": true,
   "isSkipMenuEntry": false,
-  "jsonSchemaCfg": "config-schema.json",
   "icon": "icon.svg"
 }
