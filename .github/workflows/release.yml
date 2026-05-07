@@ -1,0 +1,64 @@
+name: Release Plugin
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from manifest.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create plugin package
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          zip -r ai-assistant-plugin.zip \
+            manifest.json \
+            index.html \
+            plugin.js \
+            icon.svg \
+            README.md
+
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## AI Assistant Plugin v${{ steps.version.outputs.version }}
+            
+            ### Installation
+            1. Download `ai-assistant-plugin.zip`
+            2. In Super Productivity, go to Settings → Plugins
+            3. Click "Install from file" and select the downloaded zip
+            
+            ### Changes
+            See [commit history](https://github.com/${{ github.repository }}/commits/master) for details.
+          files: ai-assistant-plugin.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
