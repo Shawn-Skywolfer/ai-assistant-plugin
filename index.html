@@ -373,37 +373,134 @@
       }
     }
 
-    // ==================== TOOL DEFINITIONS ====================
+    // ==================== TOOL DEFINITIONS (aligned with Super-Productivity-MCP) ====================
     var tools = [
-      { type:'function', function:{ name:'getTasks', description:'Get all active tasks', parameters:{type:'object',properties:{},required:[]} }},
-      { type:'function', function:{ name:'getArchivedTasks', description:'Get archived tasks', parameters:{type:'object',properties:{},required:[]} }},
-      { type:'function', function:{ name:'getCurrentContextTasks', description:'Get current context tasks', parameters:{type:'object',properties:{},required:[]} }},
-      { type:'function', function:{ name:'addTask', description:'Create a new task', parameters:{ type:'object', properties:{
-        title:{type:'string',description:'Task title'}, notes:{type:'string',description:'Notes'},
-        projectId:{type:'string',description:'Project ID'}, tagIds:{type:'array',items:{type:'string'},description:'Tag IDs'},
-        timeEstimate:{type:'number',description:'Time estimate in ms'}, isDone:{type:'boolean'},
-        parentId:{type:'string',description:'Parent task ID for subtask'}, dueDay:{type:'string',description:'Due date YYYY-MM-DD'}
-      }, required:['title']}}},
-      { type:'function', function:{ name:'updateTask', description:'Update a task', parameters:{ type:'object', properties:{
-        taskId:{type:'string'}, title:{type:'string'}, notes:{type:'string'}, isDone:{type:'boolean'},
-        timeEstimate:{type:'number'}, dueDay:{type:'string'}, projectId:{type:'string'}, tagIds:{type:'array',items:{type:'string'}}
-      }, required:['taskId']}}},
-      { type:'function', function:{ name:'deleteTask', description:'Delete a task', parameters:{ type:'object', properties:{ taskId:{type:'string'} }, required:['taskId'] }}},
-      { type:'function', function:{ name:'getAllProjects', description:'Get all projects', parameters:{type:'object',properties:{},required:[]} }},
-      { type:'function', function:{ name:'addProject', description:'Create project', parameters:{ type:'object', properties:{ title:{type:'string'} }, required:['title'] }}},
-      { type:'function', function:{ name:'updateProject', description:'Update project', parameters:{ type:'object', properties:{ projectId:{type:'string'}, title:{type:'string'} }, required:['projectId'] }}},
-      { type:'function', function:{ name:'getAllTags', description:'Get all tags', parameters:{type:'object',properties:{},required:[]} }},
-      { type:'function', function:{ name:'addTag', description:'Create tag', parameters:{ type:'object', properties:{ title:{type:'string'}, color:{type:'string'} }, required:['title'] }}},
-      { type:'function', function:{ name:'updateTag', description:'Update tag', parameters:{ type:'object', properties:{ tagId:{type:'string'}, title:{type:'string'}, color:{type:'string'} }, required:['tagId'] }}},
-      { type:'function', function:{ name:'setCurrentTask', description:'Set task as current/active', parameters:{ type:'object', properties:{ taskId:{type:'string'} }, required:['taskId'] }}},
-      { type:'function', function:{ name:'toggleStart', description:'Start/stop timer', parameters:{type:'object',properties:{},required:[]} }},
-      { type:'function', function:{ name:'showAddTaskBar', description:'Show add task bar', parameters:{type:'object',properties:{},required:[]} }},
-      { type:'function', function:{ name:'setActiveWorkContext', description:'Switch to project/tag', parameters:{ type:'object', properties:{ contextId:{type:'string'} }, required:['contextId'] }}},
-      { type:'function', function:{ name:'addTaskToday', description:'Create a task due today. Shortcut for addTask with dueDay=today.', parameters:{ type:'object', properties:{
-        title:{type:'string',description:'Task title'}, notes:{type:'string',description:'Notes'},
-        projectId:{type:'string',description:'Project ID'}, tagIds:{type:'array',items:{type:'string'},description:'Tag IDs'},
-        timeEstimate:{type:'number',description:'Time estimate in ms'}
+      // ---------- TASKS ----------
+      { type:'function', function:{ name:'create_task', description:'Create a new task in Super Productivity. Tasks without a project go to the Inbox.', parameters:{ type:'object', properties:{
+        title:{type:'string',description:'Task title'},
+        notes:{type:'string',description:'Task notes/description'},
+        project_id:{type:'string',description:'Project ID to assign task to'},
+        parent_id:{type:'string',description:'Parent task ID for creating subtasks'},
+        tag_ids:{type:'array',items:{type:'string'},description:'Tag IDs to assign'},
+        due_day:{type:'string',description:'Due date YYYY-MM-DD'},
+        time_estimate:{type:'number',description:'Time estimate in milliseconds'}
       }, required:['title'] }}},
+      { type:'function', function:{ name:'get_tasks', description:'Get tasks with optional filters. By default returns non-done, non-archived tasks.', parameters:{ type:'object', properties:{
+        project_id:{type:'string',description:'Filter by project ID'},
+        tag_id:{type:'string',description:'Filter by tag ID'},
+        include_done:{type:'boolean',description:'Include completed tasks (default false)'},
+        include_archived:{type:'boolean',description:'Include archived tasks (default false)'},
+        search_query:{type:'string',description:'Case-insensitive title/notes search'},
+        parents_only:{type:'boolean',description:'Exclude subtasks, return only top-level tasks'},
+        overdue:{type:'boolean',description:'Return only tasks with due date before today'},
+        unscheduled:{type:'boolean',description:'Return only tasks with no due date'},
+        planned_for_today:{type:'boolean',description:'Return only tasks planned for today'},
+        recurring_only:{type:'boolean',description:'Return only recurring tasks'}
+      }, required:[] }}},
+      { type:'function', function:{ name:'update_task', description:'Update an existing task. Only pass fields you want to change.', parameters:{ type:'object', properties:{
+        task_id:{type:'string',description:'Task ID to update'},
+        title:{type:'string',description:'New title'},
+        notes:{type:'string',description:'New notes'},
+        is_done:{type:'boolean',description:'Mark as done/undone'},
+        due_day:{type:'string',description:'Due date YYYY-MM-DD, or empty string to clear'},
+        planned_at:{type:'number',description:'Unix ms timestamp to plan task (e.g. start of today). Null to unplan.'},
+        time_estimate:{type:'number',description:'Time estimate in ms'},
+        time_spent:{type:'number',description:'Time spent in ms'},
+        tag_ids:{type:'array',items:{type:'string'},description:'Bulk-replace all tags with this list'},
+        project_id:{type:'string',description:'Move to project'}
+      }, required:['task_id'] }}},
+      { type:'function', function:{ name:'complete_task', description:'Mark a single task as complete.', parameters:{ type:'object', properties:{
+        task_id:{type:'string',description:'Task ID to complete'}
+      }, required:['task_id'] }}},
+      { type:'function', function:{ name:'delete_task', description:'Permanently delete a task. Deleting a parent also removes all subtasks.', parameters:{ type:'object', properties:{
+        task_id:{type:'string',description:'Task ID to delete'}
+      }, required:['task_id'] }}},
+      { type:'function', function:{ name:'add_tag_to_task', description:'Add a single tag to a task without modifying its other tags. Idempotent.', parameters:{ type:'object', properties:{
+        task_id:{type:'string',description:'Task ID'},
+        tag_id:{type:'string',description:'Tag ID to add'}
+      }, required:['task_id','tag_id'] }}},
+      { type:'function', function:{ name:'remove_tag_from_task', description:'Remove a single tag from a task without modifying its other tags. Errors if tag not present.', parameters:{ type:'object', properties:{
+        task_id:{type:'string',description:'Task ID'},
+        tag_id:{type:'string',description:'Tag ID to remove'}
+      }, required:['task_id','tag_id'] }}},
+      { type:'function', function:{ name:'get_current_task', description:'Get the currently time-tracked task. Returns null when no task has an active timer.', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'start_task', description:'Start the time tracker on a task. Stops other tracking automatically. Cannot start a completed task.', parameters:{ type:'object', properties:{
+        task_id:{type:'string',description:'Task ID to start tracking'}
+      }, required:['task_id'] }}},
+      { type:'function', function:{ name:'stop_task', description:'Stop the currently running time tracker. Idempotent — succeeds if no timer running.', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'bulk_complete_tasks', description:'Mark multiple tasks as complete in one operation. Max 100 tasks.', parameters:{ type:'object', properties:{
+        task_ids:{type:'array',items:{type:'string'},description:'Array of task IDs to complete'}
+      }, required:['task_ids'] }}},
+      { type:'function', function:{ name:'bulk_update_tasks', description:'Update multiple tasks with different updates in one operation. Max 100.', parameters:{ type:'object', properties:{
+        updates:{type:'array',items:{type:'object',properties:{
+          task_id:{type:'string',description:'Task ID to update'},
+          title:{type:'string',description:'New title'},
+          notes:{type:'string',description:'New notes'},
+          due_day:{type:'string',description:'Due date YYYY-MM-DD or empty to clear'},
+          tag_ids:{type:'array',items:{type:'string'},description:'Replace all tags'},
+          time_estimate:{type:'number',description:'Time estimate in ms'},
+          time_spent:{type:'number',description:'Time spent in ms'}
+        }},description:'Array of task updates'}
+      }, required:['updates'] }}},
+      { type:'function', function:{ name:'move_task_to_project', description:'Move a top-level task to a different project. Errors on subtasks.', parameters:{ type:'object', properties:{
+        task_id:{type:'string',description:'Task ID to move'},
+        project_id:{type:'string',description:'Destination project ID'}
+      }, required:['task_id','project_id'] }}},
+      { type:'function', function:{ name:'reorder_tasks', description:'Reorder tasks within a project or subtasks within a parent. Provide complete ordered list.', parameters:{ type:'object', properties:{
+        task_ids:{type:'array',items:{type:'string'},description:'Complete ordered list of task IDs'},
+        context_id:{type:'string',description:'Project ID or parent task ID'},
+        context_type:{type:'string',enum:['project','parent'],description:'Whether context_id is a project or parent task'}
+      }, required:['task_ids','context_id','context_type'] }}},
+      { type:'function', function:{ name:'create_task_with_subtasks', description:'Create a parent task with subtasks in one operation. Returns parentId and subtaskIds.', parameters:{ type:'object', properties:{
+        title:{type:'string',description:'Parent task title'},
+        notes:{type:'string',description:'Parent task notes'},
+        project_id:{type:'string',description:'Project ID for the parent task'},
+        tag_ids:{type:'array',items:{type:'string'},description:'Tag IDs for the parent task'},
+        subtasks:{type:'array',items:{type:'object',properties:{title:{type:'string'},notes:{type:'string'}}},description:'Subtask definitions [{title,notes}]'}
+      }, required:['title','subtasks'] }}},
+      { type:'function', function:{ name:'plan_tasks_for_today', description:'Plan tasks for today (adds to Today view) or unplan them. Max 100.', parameters:{ type:'object', properties:{
+        task_ids:{type:'array',items:{type:'string'},description:'Task IDs to plan/unplan'},
+        unplan:{type:'boolean',description:'If true, removes tasks from today instead (default false)'}
+      }, required:['task_ids'] }}},
+      { type:'function', function:{ name:'get_worklog', description:'Get worklog summary for a date range: time per day/project/tag, tasks completed, estimate accuracy.', parameters:{ type:'object', properties:{
+        start_date:{type:'string',description:'Start date ISO (e.g. 2026-04-14)'},
+        end_date:{type:'string',description:'End date ISO (e.g. 2026-04-20)'}
+      }, required:['start_date','end_date'] }}},
+
+      // ---------- PROJECTS ----------
+      { type:'function', function:{ name:'get_projects', description:'Get all projects from Super Productivity.', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'create_project', description:'Create a new project.', parameters:{ type:'object', properties:{
+        title:{type:'string',description:'Project title'},
+        description:{type:'string',description:'Project description'},
+        color:{type:'string',description:'Project color hex code (e.g. #2196F3)'}
+      }, required:['title'] }}},
+      { type:'function', function:{ name:'update_project', description:'Update an existing project.', parameters:{ type:'object', properties:{
+        project_id:{type:'string',description:'Project ID to update'},
+        title:{type:'string',description:'New title'},
+        color:{type:'string',description:'New color hex code'}
+      }, required:['project_id'] }}},
+
+      // ---------- TAGS ----------
+      { type:'function', function:{ name:'get_tags', description:'Get all tags from Super Productivity.', parameters:{type:'object',properties:{},required:[]} }},
+      { type:'function', function:{ name:'create_tag', description:'Create a new tag.', parameters:{ type:'object', properties:{
+        title:{type:'string',description:'Tag title'},
+        color:{type:'string',description:'Tag color hex code (e.g. #FF9800)'}
+      }, required:['title'] }}},
+      { type:'function', function:{ name:'update_tag', description:'Update an existing tag.', parameters:{ type:'object', properties:{
+        tag_id:{type:'string',description:'Tag ID to update'},
+        title:{type:'string',description:'New title'},
+        color:{type:'string',description:'New color hex code'},
+        icon:{type:'string',description:'New icon'}
+      }, required:['tag_id'] }}},
+
+      // ---------- APP STATE ----------
+      { type:'function', function:{ name:'set_active_work_context', description:'Switch active view to a project or tag.', parameters:{ type:'object', properties:{
+        context_id:{type:'string',description:'Project ID or Tag ID to switch to'}
+      }, required:['context_id'] }}},
+      { type:'function', function:{ name:'show_notification', description:'Show a notification (snackbar) in the app UI.', parameters:{ type:'object', properties:{
+        message:{type:'string',description:'Notification message'},
+        type:{type:'string',enum:['SUCCESS','INFO','WARNING','ERROR'],description:'Notification type (default INFO)'}
+      }, required:['message'] }}},
     ];
 
     // ==================== SYSTEM PROMPT ====================
@@ -413,23 +510,194 @@
     async function executeTool(name, args) {
       try {
         switch (name) {
-          case 'getTasks': return (await PluginAPI.getTasks()).map(function(t){ return {id:t.id,title:t.title,isDone:t.isDone,projectId:t.projectId,tagIds:t.tagIds,dueDay:t.dueDay,timeEstimate:t.timeEstimate,notes:t.notes?t.notes.slice(0,200):null,subTaskIds:t.subTaskIds}; });
-          case 'getArchivedTasks': return (await PluginAPI.getArchivedTasks()).slice(0,50).map(function(t){ return {id:t.id,title:t.title,isDone:t.isDone}; });
-          case 'getCurrentContextTasks': return (await PluginAPI.getCurrentContextTasks()).map(function(t){ return {id:t.id,title:t.title,isDone:t.isDone}; });
-          case 'addTask': var d={}; if(args.title)d.title=args.title; if(args.notes)d.notes=args.notes; if(args.projectId)d.projectId=args.projectId; if(args.tagIds)d.tagIds=args.tagIds; if(args.timeEstimate)d.timeEstimate=args.timeEstimate; if(args.isDone!==undefined)d.isDone=args.isDone; if(args.parentId)d.parentId=args.parentId; if(args.dueDay)d.dueDay=args.dueDay; return {success:true,taskId:await PluginAPI.addTask(d)};
-          case 'updateTask': var u={}; if(args.title!==undefined)u.title=args.title; if(args.notes!==undefined)u.notes=args.notes; if(args.isDone!==undefined)u.isDone=args.isDone; if(args.timeEstimate!==undefined)u.timeEstimate=args.timeEstimate; if(args.dueDay!==undefined)u.dueDay=args.dueDay; if(args.projectId!==undefined)u.projectId=args.projectId; if(args.tagIds!==undefined)u.tagIds=args.tagIds; await PluginAPI.updateTask(args.taskId,u); return {success:true};
-          case 'deleteTask': await PluginAPI.deleteTask(args.taskId); return {success:true};
-          case 'getAllProjects': return (await PluginAPI.getAllProjects()).map(function(p){ return {id:p.id,title:p.title,taskCount:p.taskIds?p.taskIds.length:0}; });
-          case 'addProject': return {success:true,projectId:await PluginAPI.addProject({title:args.title})};
-          case 'updateProject': await PluginAPI.updateProject(args.projectId,{title:args.title}); return {success:true};
-          case 'getAllTags': return (await PluginAPI.getAllTags()).map(function(t){ return {id:t.id,title:t.title,color:t.color}; });
-          case 'addTag': return {success:true,tagId:await PluginAPI.addTag({title:args.title,color:args.color})};
-          case 'updateTag': await PluginAPI.updateTag(args.tagId,{title:args.title,color:args.color}); return {success:true};
-          case 'setCurrentTask': PluginAPI.dispatchAction({type:'[Task] SetCurrentTask',payload:{task:{id:args.taskId}}}); currentTaskId=args.taskId; return {success:true};
-          case 'toggleStart': PluginAPI.dispatchAction({type:'[Task] ToggleStart'}); return {success:true};
-          case 'showAddTaskBar': PluginAPI.dispatchAction({type:'[Layout] ShowAddTaskBar'}); return {success:true};
-          case 'setActiveWorkContext': PluginAPI.dispatchAction({type:'[WorkContext] SetActiveWorkContext',activeId:args.contextId}); return {success:true};
-          case 'addTaskToday': var td=new Date().toISOString().slice(0,10); var ad={title:args.title,dueDay:td}; if(args.notes)ad.notes=args.notes; if(args.projectId)ad.projectId=args.projectId; if(args.tagIds)ad.tagIds=args.tagIds; if(args.timeEstimate)ad.timeEstimate=args.timeEstimate; return {success:true,taskId:await PluginAPI.addTask(ad),dueDay:td};
+          // ---- TASKS ----
+          case 'create_task': {
+            var d = {title:args.title, notes:args.notes||'', tagIds:args.tag_ids||[]};
+            if(args.project_id) d.projectId = args.project_id;
+            if(args.parent_id) d.parentId = args.parent_id;
+            if(args.due_day) d.dueDay = args.due_day;
+            if(args.time_estimate) d.timeEstimate = args.time_estimate;
+            var id = await PluginAPI.addTask(d);
+            return {success:true, task_id:id};
+          }
+          case 'get_tasks': {
+            var tasks = await PluginAPI.getTasks();
+            if(!args.include_done) tasks = tasks.filter(function(t){return !t.isDone;});
+            if(args.project_id) tasks = tasks.filter(function(t){return t.projectId===args.project_id;});
+            if(args.tag_id) tasks = tasks.filter(function(t){return t.tagIds&&t.tagIds.indexOf(args.tag_id)!==-1;});
+            if(args.search_query){var q=args.search_query.toLowerCase();tasks=tasks.filter(function(t){return(t.title&&t.title.toLowerCase().indexOf(q)!==-1)||(t.notes&&t.notes.toLowerCase().indexOf(q)!==-1);});}
+            if(args.parents_only) tasks = tasks.filter(function(t){return !t.parentId;});
+            if(args.overdue){var today=new Date().toISOString().slice(0,10);tasks=tasks.filter(function(t){return t.dueDay&&t.dueDay<today;});}
+            if(args.unscheduled) tasks = tasks.filter(function(t){return !t.dueDay&&!t.dueWithTime;});
+            if(args.planned_for_today){var now=new Date(),sod=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime(),eot=sod+86400000;tasks=tasks.filter(function(t){return t.plannedAt&&t.plannedAt>=sod&&t.plannedAt<eot;});}
+            if(args.recurring_only) tasks = tasks.filter(function(t){return t.repeatCfgId!=null;});
+            return tasks.map(function(t){return{id:t.id,title:t.title,isDone:t.isDone,projectId:t.projectId,parentId:t.parentId,tagIds:t.tagIds,dueDay:t.dueDay,plannedAt:t.plannedAt,timeEstimate:t.timeEstimate,timeSpent:t.timeSpent,notes:t.notes?String(t.notes).slice(0,300):null,subTaskIds:t.subTaskIds,doneOn:t.doneOn};});
+          }
+          case 'update_task': {
+            var u={};
+            if(args.title!==undefined) u.title=args.title;
+            if(args.notes!==undefined) u.notes=args.notes;
+            if(args.is_done!==undefined){u.isDone=args.is_done;u.doneOn=args.is_done?Date.now():null;}
+            if(args.due_day!==undefined) u.dueDay=args.due_day||null;
+            if(args.planned_at!==undefined) u.plannedAt=args.planned_at;
+            if(args.time_estimate!==undefined) u.timeEstimate=args.time_estimate;
+            if(args.time_spent!==undefined) u.timeSpent=args.time_spent;
+            if(args.tag_ids!==undefined) u.tagIds=args.tag_ids;
+            if(args.project_id!==undefined) u.projectId=args.project_id;
+            await PluginAPI.updateTask(args.task_id, u);
+            return {success:true};
+          }
+          case 'complete_task': {
+            var ct = await PluginAPI.getTasks();
+            var found = ct.find(function(t){return t.id===args.task_id;});
+            if(!found) return {error:'Task not found: '+args.task_id};
+            await PluginAPI.updateTask(args.task_id, {isDone:true, doneOn:Date.now()});
+            return {success:true};
+          }
+          case 'delete_task':
+            await PluginAPI.deleteTask(args.task_id);
+            return {success:true};
+          case 'add_tag_to_task': {
+            var at = await PluginAPI.getTasks();
+            var af = at.find(function(t){return t.id===args.task_id;});
+            if(!af) return {error:'Task not found'};
+            var atags = af.tagIds?af.tagIds.slice():[];
+            if(atags.indexOf(args.tag_id)===-1) atags.push(args.tag_id);
+            await PluginAPI.updateTask(args.task_id, {tagIds:atags});
+            return {success:true};
+          }
+          case 'remove_tag_from_task': {
+            var rt = await PluginAPI.getTasks();
+            var rf = rt.find(function(t){return t.id===args.task_id;});
+            if(!rf) return {error:'Task not found'};
+            var rtags = rf.tagIds?rf.tagIds.slice():[];
+            var ri = rtags.indexOf(args.tag_id);
+            if(ri===-1) return {error:'Tag not on task'};
+            rtags.splice(ri,1);
+            await PluginAPI.updateTask(args.task_id, {tagIds:rtags});
+            return {success:true};
+          }
+          case 'get_current_task': {
+            var all = await PluginAPI.getTasks();
+            var cur = all.find(function(t){return t.isDone===false && t.id===currentTaskId;});
+            return cur?{id:cur.id,title:cur.title,isDone:cur.isDone,projectId:cur.projectId,tagIds:cur.tagIds,timeEstimate:cur.timeEstimate}:null;
+          }
+          case 'start_task': {
+            PluginAPI.dispatchAction({type:'[Task] SetCurrentTask',payload:{task:{id:args.task_id}}});
+            PluginAPI.dispatchAction({type:'[Task] ToggleStart'});
+            currentTaskId = args.task_id;
+            return {success:true};
+          }
+          case 'stop_task': {
+            PluginAPI.dispatchAction({type:'[Task] ToggleStart'});
+            return {success:true};
+          }
+          case 'bulk_complete_tasks': {
+            var results = [];
+            for(var bi=0;bi<args.task_ids.length;bi++){
+              try{await PluginAPI.updateTask(args.task_ids[bi],{isDone:true,doneOn:Date.now()});results.push({task_id:args.task_ids[bi],success:true});}
+              catch(e){results.push({task_id:args.task_ids[bi],success:false,error:e.message});}
+            }
+            return {results:results};
+          }
+          case 'bulk_update_tasks': {
+            var bresults = [];
+            for(var bu=0;bu<args.updates.length;bu++){
+              var upd=args.updates[bu],bd={};
+              if(upd.title!==undefined)bd.title=upd.title;
+              if(upd.notes!==undefined)bd.notes=upd.notes;
+              if(upd.due_day!==undefined)bd.dueDay=upd.due_day||null;
+              if(upd.tag_ids!==undefined)bd.tagIds=upd.tag_ids;
+              if(upd.time_estimate!==undefined)bd.timeEstimate=upd.time_estimate;
+              if(upd.time_spent!==undefined)bd.timeSpent=upd.time_spent;
+              try{await PluginAPI.updateTask(upd.task_id,bd);bresults.push({task_id:upd.task_id,success:true});}
+              catch(e){bresults.push({task_id:upd.task_id,success:false,error:e.message});}
+            }
+            return {results:bresults};
+          }
+          case 'move_task_to_project':
+            await PluginAPI.updateTask(args.task_id, {projectId:args.project_id});
+            return {success:true};
+          case 'reorder_tasks':
+            for(var ri2=0;ri2<args.task_ids.length;ri2++){
+              try{await PluginAPI.updateTask(args.task_ids[ri2],{_order:ri2});}catch(e){}
+            }
+            return {success:true};
+          case 'create_task_with_subtasks': {
+            var parentId = await PluginAPI.addTask({title:args.title,notes:args.notes||'',projectId:args.project_id||null,tagIds:args.tag_ids||[]});
+            var subIds = [];
+            for(var si=0;si<(args.subtasks||[]).length;si++){
+              var st=args.subtasks[si];
+              var sid=await PluginAPI.addTask({title:st.title,notes:st.notes||'',parentId:parentId,projectId:args.project_id||null,tagIds:[]});
+              subIds.push(sid);
+            }
+            return {parent_id:parentId, subtask_ids:subIds};
+          }
+          case 'plan_tasks_for_today': {
+            var pnow=new Date(),pstart=new Date(pnow.getFullYear(),pnow.getMonth(),pnow.getDate()).getTime();
+            var pval=args.unplan?null:pstart;
+            var presults=[];
+            for(var pi=0;pi<args.task_ids.length;pi++){
+              try{await PluginAPI.updateTask(args.task_ids[pi],{plannedAt:pval});presults.push({task_id:args.task_ids[pi],success:true});}
+              catch(e){presults.push({task_id:args.task_ids[pi],success:false,error:e.message});}
+            }
+            return {results:presults};
+          }
+          case 'get_worklog': {
+            var wtasks = await PluginAPI.getTasks();
+            var wdone = await PluginAPI.getArchivedTasks ? await PluginAPI.getArchivedTasks() : [];
+            var wall = wtasks.concat(wdone);
+            var daily={},byProject={},byTag={},completed=0,totalEst=0,totalAct=0;
+            for(var wi=0;wi<wall.length;wi++){
+              var wt=wall[wi];
+              if(wt.timeSpentOnDay){for(var wd in wt.timeSpentOnDay){if(wd>=args.start_date&&wd<=args.end_date){daily[wd]=(daily[wd]||0)+wt.timeSpentOnDay[wd];var wp=wt.projectId||'No Project';byProject[wp]=(byProject[wp]||0)+wt.timeSpentOnDay[wd];for(var wti=0;wti<(wt.tagIds||[]).length;wti++){byTag[wt.tagIds[wti]]=(byTag[wt.tagIds[wti]]||0)+wt.timeSpentOnDay[wd];}}}}
+              if(wt.isDone&&wt.doneOn){var wdd=new Date(wt.doneOn),wds=wdd.getFullYear()+'-'+String(wdd.getMonth()+1).padStart(2,'0')+'-'+String(wdd.getDate()).padStart(2,'0');if(wds>=args.start_date&&wds<=args.end_date){completed++;if(wt.timeEstimate>0){totalEst+=wt.timeEstimate;totalAct+=wt.timeSpent;}}}
+            }
+            return{dateRange:{start:args.start_date,end:args.end_date},daily:daily,byProject:byProject,byTag:byTag,tasksCompleted:completed,estimateAccuracy:totalEst>0?{estimateMs:totalEst,actualMs:totalAct,ratio:totalAct/totalEst}:null};
+          }
+
+          // ---- PROJECTS ----
+          case 'get_projects':
+            return (await PluginAPI.getAllProjects()).map(function(p){return{id:p.id,title:p.title,taskCount:p.taskIds?p.taskIds.length:0};});
+          case 'create_project': {
+            var pdata={title:args.title};
+            if(args.description) pdata.description=args.description;
+            if(args.color) pdata.theme={primary:args.color};
+            return {success:true, project_id:await PluginAPI.addProject(pdata)};
+          }
+          case 'update_project': {
+            var up={};
+            if(args.title!==undefined) up.title=args.title;
+            if(args.color!==undefined) up.theme={primary:args.color};
+            await PluginAPI.updateProject(args.project_id, up);
+            return {success:true};
+          }
+
+          // ---- TAGS ----
+          case 'get_tags':
+            return (await PluginAPI.getAllTags()).map(function(t){return{id:t.id,title:t.title,color:t.color,icon:t.icon};});
+          case 'create_tag': {
+            var td2={title:args.title};
+            if(args.color) td2.color=args.color;
+            return {success:true, tag_id:await PluginAPI.addTag(td2)};
+          }
+          case 'update_tag': {
+            var tu={};
+            if(args.title!==undefined) tu.title=args.title;
+            if(args.color!==undefined) tu.color=args.color;
+            if(args.icon!==undefined) tu.icon=args.icon;
+            await PluginAPI.updateTag(args.tag_id, tu);
+            return {success:true};
+          }
+
+          // ---- APP STATE ----
+          case 'set_active_work_context':
+            PluginAPI.dispatchAction({type:'[WorkContext] SetActiveWorkContext',activeId:args.context_id});
+            return {success:true};
+          case 'show_notification':
+            PluginAPI.dispatchAction({type:'[Snack] Show',message:args.message||'',data:{type:args.type||'INFO'}});
+            return {success:true};
+
           default: return {error:'Unknown tool: '+name};
         }
       } catch (e) { return {error:e.message||String(e)}; }
@@ -627,7 +895,7 @@
         var card=document.createElement('div'); card.className='action-card '+(a.result.error?'error':'success');
         var ic=document.createElement('span'); ic.className='action-icon'; ic.textContent=a.result.error?'✗':'✓';
         var n=document.createElement('span'); n.className='action-name'; n.textContent=a.name;
-        var dt=document.createElement('span'); dt.className='action-detail'; dt.textContent=a.args.title||a.args.taskId?(a.args.title||a.args.taskId.slice(0,8)+'...'):'';
+        var dt=document.createElement('span'); dt.className='action-detail'; dt.textContent=a.args.title||a.args.task_id?(a.args.title||a.args.task_id.slice(0,8)+'...'):'';
         card.appendChild(ic);card.appendChild(n);card.appendChild(dt);d.appendChild(card);
       }
       c.appendChild(d); c.scrollTop=c.scrollHeight;
