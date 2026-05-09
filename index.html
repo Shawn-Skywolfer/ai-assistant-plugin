@@ -759,7 +759,9 @@
           if (!choice) throw new Error('No response');
           var am = choice.message;
           if (am.tool_calls && am.tool_calls.length > 0) {
-            messages.push({role:'assistant',content:am.content||null,tool_calls:am.tool_calls});
+            var asstMsg = {role:'assistant',content:am.content||null,tool_calls:am.tool_calls};
+            if(am.reasoning_content) asstMsg.reasoning_content = am.reasoning_content;
+            messages.push(asstMsg);
             for (var i=0;i<am.tool_calls.length;i++) {
               var tc=am.tool_calls[i], args={};
               try{args=JSON.parse(tc.function.arguments);}catch(e){}
@@ -769,7 +771,9 @@
             }
             response=await callOpenAI(messages); round++;
           } else {
-            messages.push({role:'assistant',content:am.content});
+            var finalMsg = {role:'assistant',content:am.content};
+            if(am.reasoning_content) finalMsg.reasoning_content = am.reasoning_content;
+            messages.push(finalMsg);
             removeThinking(thinkingEl);
             if(allActions.length>0) displayActions(allActions);
             displayMessage('assistant',am.content||'(No response)');
