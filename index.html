@@ -27,7 +27,7 @@
     .header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 8px 12px; border-bottom: 1px solid var(--chat-border);
-      background: var(--chat-surface); flex-shrink: 0;
+      background: var(--chat-surface); flex-shrink: 0; position: relative;
     }
     .header-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
     .header-title svg { width: 18px; height: 18px; color: var(--chat-primary); }
@@ -182,6 +182,64 @@
     .btn-cancel { background: var(--chat-bg); color: var(--chat-text); border: 1px solid var(--chat-border) !important; }
     .btn-save { background: var(--chat-primary); color: #fff; }
     .model-info { font-size: 11px; color: var(--chat-text-muted); margin-top: 2px; }
+
+    /* Conversation selector */
+    .conv-selector {
+      background: none; border: none; color: var(--chat-text);
+      cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit;
+      display: flex; align-items: center; gap: 4px; padding: 2px 6px;
+      border-radius: 4px; max-width: 160px;
+    }
+    .conv-selector:hover { background: rgba(255,255,255,0.05); }
+    .conv-selector-title {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .conv-selector-arrow { font-size: 8px; color: var(--chat-text-muted); flex-shrink: 0; }
+    #new-conv-btn {
+      font-size: 18px; font-weight: 300; line-height: 1;
+      padding: 2px 8px;
+    }
+
+    /* Conversation dropdown */
+    .conv-dropdown-backdrop {
+      position: fixed; inset: 0; z-index: 49;
+    }
+    .conv-dropdown-backdrop.hidden { display: none; }
+    .conv-dropdown {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+      background: var(--chat-surface); border-bottom: 1px solid var(--chat-border);
+      max-height: 60vh; overflow-y: auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      animation: slideDown 0.15s ease;
+    }
+    .conv-dropdown.hidden { display: none; }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    .conv-item {
+      display: flex; align-items: center; padding: 10px 12px;
+      cursor: pointer; border-left: 3px solid transparent; gap: 8px;
+      transition: background 0.1s;
+    }
+    .conv-item:hover { background: rgba(255,255,255,0.03); }
+    .conv-item.active {
+      border-left-color: var(--chat-primary);
+      background: rgba(79,195,247,0.06);
+    }
+    .conv-item-info { flex: 1; min-width: 0; }
+    .conv-item-title {
+      font-size: 13px; color: var(--chat-text); font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .conv-item-date { font-size: 10px; color: var(--chat-text-muted); margin-top: 1px; }
+    .conv-item-delete {
+      background: none; border: none; color: var(--chat-text-muted);
+      cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px;
+      flex-shrink: 0; opacity: 0; transition: opacity 0.1s;
+    }
+    .conv-item:hover .conv-item-delete { opacity: 1; }
+    .conv-item-delete:hover { color: var(--chat-warn); background: rgba(255,87,34,0.1); }
+    .conv-dropdown-empty {
+      padding: 16px; text-align: center; color: var(--chat-text-muted); font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -193,14 +251,19 @@
         <circle cx="9" cy="14" r="1.5" fill="currentColor"/>
         <circle cx="15" cy="14" r="1.5" fill="currentColor"/>
       </svg>
-      AI Assistant
+      <button id="conv-selector" class="conv-selector" title="Switch conversation">
+        <span id="conv-selector-title">AI Assistant</span>
+        <span class="conv-selector-arrow">▼</span>
+      </button>
       <span id="model-badge" style="font-size:10px;color:var(--chat-text-muted);font-weight:400;"></span>
     </div>
     <div class="header-actions">
+      <button id="new-conv-btn" title="New Chat">+</button>
       <button id="settings-btn" title="Settings">⚙️</button>
-      <button id="clear-btn" title="Clear conversation">Clear</button>
     </div>
+    <div id="conv-dropdown" class="conv-dropdown hidden"></div>
   </div>
+  <div id="conv-dropdown-backdrop" class="conv-dropdown-backdrop hidden"></div>
 
   <div id="chat-container" class="chat-container"></div>
 
@@ -246,9 +309,13 @@
   <script>
     // ==================== STATE ====================
     var CONFIG_KEY = 'ai-assistant-config';
-    var CONV_KEY = 'ai-assistant-conversation';
+    var CONVERSATIONS_KEY = 'ai-assistant-conversations';
+    var OLD_CONV_KEY = 'ai-assistant-conversation';
+    var MAX_CONVERSATIONS = 20;
+    var MAX_MESSAGES = 50;
     var config = null;
-    var messages = [];
+    var conversations = null;  // { activeId, list: [{id,title,createdAt,updatedAt,messages}] }
+    var messages = [];          // live reference to active conversation's messages
     var isProcessing = false;
     var currentTaskId = null;
 
@@ -260,7 +327,6 @@
           var parsed = JSON.parse(raw);
           if (parsed && parsed[CONFIG_KEY]) {
             config = parsed[CONFIG_KEY];
-            console.log('[AI] Config loaded, model:', config.model);
             return true;
           }
         }
@@ -274,52 +340,187 @@
     async function saveConfig(cfg) {
       config = cfg;
       try {
-        // Load existing data to preserve conversation
         var raw = await PluginAPI.loadSyncedData();
         var data = {};
         if (raw) { try { data = JSON.parse(raw); } catch(e) {} }
         data[CONFIG_KEY] = cfg;
         await PluginAPI.persistDataSynced(JSON.stringify(data));
-        console.log('[AI] Config saved');
         updateModelBadge();
       } catch (e) {
         console.error('[AI] saveConfig error:', e);
       }
     }
 
-    async function loadConversation() {
+    // ==================== CONVERSATION PERSISTENCE ====================
+    async function loadConversations() {
       try {
         var raw = await PluginAPI.loadSyncedData();
         if (raw) {
           var parsed = JSON.parse(raw);
-          if (parsed && parsed[CONV_KEY] && parsed[CONV_KEY].length > 0) {
-            messages = parsed[CONV_KEY];
-            var container = document.getElementById('chat-container');
-            container.innerHTML = '';
-            for (var i = 0; i < messages.length; i++) {
-              var m = messages[i];
-              if (m.role === 'user') {
-                var text = m.content.split('\n\n---\n[App Context]')[0];
-                displayMessage('user', text);
-              } else if (m.role === 'assistant' && m.content) {
-                displayMessage('assistant', m.content);
-              }
-            }
+          if (parsed && parsed[CONVERSATIONS_KEY]) {
+            conversations = parsed[CONVERSATIONS_KEY];
+            var active = getActiveConv();
+            messages = active ? active.messages : [];
             return true;
           }
         }
-      } catch (e) { console.error('[AI] loadConversation error:', e); }
+      } catch (e) { console.error('[AI] loadConversations error:', e); }
+      conversations = null;
+      messages = [];
       return false;
     }
 
-    async function saveConversation() {
+    async function saveConversations() {
+      if (!conversations) return;
+      // Sync messages back to active conversation
+      var active = getActiveConv();
+      if (active) {
+        active.messages = messages.slice(-MAX_MESSAGES);
+        active.updatedAt = Date.now();
+      }
       try {
         var raw = await PluginAPI.loadSyncedData();
         var data = {};
         if (raw) { try { data = JSON.parse(raw); } catch(e) {} }
-        data[CONV_KEY] = messages.slice(-50);
+        data[CONVERSATIONS_KEY] = conversations;
         await PluginAPI.persistDataSynced(JSON.stringify(data));
-      } catch (e) { console.warn('[AI] saveConversation error:', e); }
+      } catch (e) { console.warn('[AI] saveConversations error:', e); }
+    }
+
+    function getActiveConv() {
+      if (!conversations || !conversations.list) return null;
+      for (var i = 0; i < conversations.list.length; i++) {
+        if (conversations.list[i].id === conversations.activeId) return conversations.list[i];
+      }
+      return null;
+    }
+
+    function createConversation(title) {
+      if (!conversations || !conversations.list) {
+        conversations = { activeId: null, list: [] };
+      }
+      if (conversations.list.length >= MAX_CONVERSATIONS) {
+        conversations.list.pop(); // Remove oldest
+      }
+      var conv = {
+        id: 'conv_' + Date.now(),
+        title: title || 'New Chat',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: []
+      };
+      conversations.list.unshift(conv);
+      conversations.activeId = conv.id;
+      messages = conv.messages;
+      saveConversations();
+      return conv;
+    }
+
+    function switchConversation(id) {
+      if (!conversations) return;
+      // Verify target exists
+      var found = false;
+      for (var i = 0; i < conversations.list.length; i++) {
+        if (conversations.list[i].id === id) { found = true; break; }
+      }
+      if (!found) return;
+      // Save current messages to active conv
+      var cur = getActiveConv();
+      if (cur) {
+        cur.messages = messages.slice(-MAX_MESSAGES);
+        cur.updatedAt = Date.now();
+      }
+      conversations.activeId = id;
+      var next = getActiveConv();
+      messages = next ? next.messages : [];
+      saveConversations();
+    }
+
+    function deleteConversation(id) {
+      if (!conversations) return;
+      var idx = -1;
+      for (var i = 0; i < conversations.list.length; i++) {
+        if (conversations.list[i].id === id) { idx = i; break; }
+      }
+      if (idx === -1) return;
+      conversations.list.splice(idx, 1);
+      if (conversations.list.length === 0) {
+        createConversation('New Chat');
+      } else if (conversations.activeId === id) {
+        conversations.activeId = conversations.list[0].id;
+        messages = conversations.list[0].messages;
+      }
+      saveConversations();
+    }
+
+    function renameConversation(id, title) {
+      if (!conversations) return;
+      for (var i = 0; i < conversations.list.length; i++) {
+        if (conversations.list[i].id === id) {
+          conversations.list[i].title = title;
+          saveConversations();
+          return;
+        }
+      }
+    }
+
+    function autoNameConversation() {
+      if (!conversations) return;
+      var active = getActiveConv();
+      if (!active) return;
+      if (active.title === 'New Chat' || active.title === 'Previous Chat') {
+        for (var i = 0; i < messages.length; i++) {
+          if (messages[i].role === 'user') {
+            var text = messages[i].content.split('\n\n---\n[App Context]')[0].trim();
+            if (!text) return;
+            var title = text.slice(0, 40);
+            if (title.length < text.length) title += '...';
+            renameConversation(active.id, title);
+            return;
+          }
+        }
+      }
+    }
+
+    async function migrateOldFormat() {
+      try {
+        var raw = await PluginAPI.loadSyncedData();
+        if (!raw) return;
+        var data = JSON.parse(raw);
+        // Only migrate if new format doesn't exist and old format does
+        if (!data[CONVERSATIONS_KEY] && data[OLD_CONV_KEY] && data[OLD_CONV_KEY].length > 0) {
+          var oldMessages = data[OLD_CONV_KEY];
+          conversations = {
+            activeId: 'conv_migrated',
+            list: [{
+              id: 'conv_migrated',
+              title: 'Previous Chat',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              messages: oldMessages.slice(-MAX_MESSAGES)
+            }]
+          };
+          messages = conversations.list[0].messages;
+          data[CONVERSATIONS_KEY] = conversations;
+          delete data[OLD_CONV_KEY];
+          await PluginAPI.persistDataSynced(JSON.stringify(data));
+          console.log('[AI] Migrated old conversation format to multi-conversation');
+        }
+      } catch (e) { console.warn('[AI] migrateOldFormat error:', e); }
+    }
+
+    function renderAllMessages() {
+      var container = document.getElementById('chat-container');
+      container.innerHTML = '';
+      for (var i = 0; i < messages.length; i++) {
+        var m = messages[i];
+        if (m.role === 'user') {
+          var text = m.content.split('\n\n---\n[App Context]')[0];
+          displayMessage('user', text);
+        } else if (m.role === 'assistant' && m.content) {
+          displayMessage('assistant', m.content);
+        }
+      }
     }
 
     // ==================== SETTINGS UI ====================
@@ -751,7 +952,7 @@
 
       var thinkingEl = showThinking();
       try {
-        var maxRounds = 5, round = 0;
+        var maxRounds = 10, round = 0;
         var response = await callOpenAI(messages);
         var allActions = [];
         while (round < maxRounds) {
@@ -782,16 +983,28 @@
         }
         if(round>=maxRounds){removeThinking(thinkingEl);if(allActions.length>0)displayActions(allActions);displayMessage('assistant','⚠️ Max rounds reached.');}
       } catch(e) { removeThinking(thinkingEl); displayError(e.message); }
-      isProcessing=false; updateSendBtn(); saveConversation();
+      isProcessing=false; updateSendBtn();
+      autoNameConversation();
+      updateConvSelector();
+      saveConversations();
     }
 
     // ==================== MARKDOWN RENDERER ====================
     function escapeHtml(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function sanitizeUrl(url) {
+      var trimmed = url.trim();
+      var lower = trimmed.toLowerCase();
+      if (lower.indexOf('javascript:') === 0 || lower.indexOf('data:') === 0 || lower.indexOf('vbscript:') === 0) {
+        return '';
+      }
+      return trimmed;
     }
 
     function renderMarkdown(md) {
-      // Extract code blocks first to protect them
+      // Extract code blocks first to protect them from escaping
       var codeBlocks = [];
       md = md.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
         codeBlocks.push({ lang: lang, code: code });
@@ -804,6 +1017,9 @@
         inlineCodes.push(code);
         return '%%INLINE_' + (inlineCodes.length - 1) + '%%';
       });
+
+      // Escape HTML in remaining text to prevent XSS from AI model output
+      md = escapeHtml(md);
 
       // Headers
       md = md.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
@@ -819,12 +1035,15 @@
       md = md.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
       md = md.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
-      // Links
-      md = md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      // Links (sanitize URLs to block XSS via javascript:/data: schemes)
+      md = md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, text, url) {
+        var safe = sanitizeUrl(url);
+        return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + text + '</a>' : text;
+      });
 
-      // Blockquotes
+      // Blockquotes — after escaping, > becomes &gt; so match both forms
+      md = md.replace(/^&amp;gt; (.+)$/gm, '<blockquote>$1</blockquote>');
       md = md.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-      md = md.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
 
       // Tables
       md = md.replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)+)/gm, function(_, header, sep, body) {
@@ -946,40 +1165,171 @@
       var i=document.getElementById('input'); i.style.height='auto'; i.style.height=Math.min(i.scrollHeight,120)+'px';
     }
     function updateSendBtn(){document.getElementById('send-btn').disabled=isProcessing;}
-    function clearConversation(){messages=[];showWelcome();saveConversation();}
+    function clearConversation(){
+      messages.length = 0;
+      showWelcome();
+      saveConversations();
+    }
+
+    // ==================== CONVERSATION DROPDOWN UI ====================
+    function openConvDropdown() {
+      document.getElementById('conv-dropdown').classList.remove('hidden');
+      document.getElementById('conv-dropdown-backdrop').classList.remove('hidden');
+      renderConvDropdown();
+    }
+
+    function closeConvDropdown() {
+      document.getElementById('conv-dropdown').classList.add('hidden');
+      document.getElementById('conv-dropdown-backdrop').classList.add('hidden');
+    }
+
+    function toggleConvDropdown() {
+      var dd = document.getElementById('conv-dropdown');
+      if (dd.classList.contains('hidden')) openConvDropdown();
+      else closeConvDropdown();
+    }
+
+    function renderConvDropdown() {
+      var dd = document.getElementById('conv-dropdown');
+      dd.innerHTML = '';
+      if (!conversations || conversations.list.length === 0) {
+        dd.innerHTML = '<div class="conv-dropdown-empty">No conversations</div>';
+        return;
+      }
+      for (var i = 0; i < conversations.list.length; i++) {
+        var conv = conversations.list[i];
+        var item = document.createElement('div');
+        item.className = 'conv-item' + (conv.id === conversations.activeId ? ' active' : '');
+        item.setAttribute('data-conv-id', conv.id);
+        var info = document.createElement('div');
+        info.className = 'conv-item-info';
+        var titleEl = document.createElement('div');
+        titleEl.className = 'conv-item-title';
+        titleEl.textContent = conv.title;
+        var dateEl = document.createElement('div');
+        dateEl.className = 'conv-item-date';
+        dateEl.textContent = new Date(conv.updatedAt).toLocaleString();
+        var delBtn = document.createElement('button');
+        delBtn.className = 'conv-item-delete';
+        delBtn.textContent = '×';
+        delBtn.title = 'Delete conversation';
+        delBtn.setAttribute('data-conv-id', conv.id);
+        info.appendChild(titleEl);
+        info.appendChild(dateEl);
+        item.appendChild(info);
+        item.appendChild(delBtn);
+        dd.appendChild(item);
+      }
+    }
+
+    function updateConvSelector() {
+      var active = getActiveConv();
+      var titleEl = document.getElementById('conv-selector-title');
+      titleEl.textContent = active ? active.title : 'AI Assistant';
+    }
 
     // ==================== INIT ====================
     function setupEventListeners() {
       var input=document.getElementById('input');
       var sendBtn=document.getElementById('send-btn');
-      var clearBtn=document.getElementById('clear-btn');
       var settingsBtn=document.getElementById('settings-btn');
       var settingsSave=document.getElementById('settings-save');
       var settingsCancel=document.getElementById('settings-cancel');
+      var convSelector=document.getElementById('conv-selector');
+      var newConvBtn=document.getElementById('new-conv-btn');
+      var convDropdown=document.getElementById('conv-dropdown');
+      var convBackdrop=document.getElementById('conv-dropdown-backdrop');
 
       input.addEventListener('input',autoResize);
       input.addEventListener('keydown',function(e){
         if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();var t=input.value;if(t.trim()){sendMessage(t);input.value='';autoResize();}}
       });
       sendBtn.addEventListener('click',function(){var t=input.value;if(t.trim()){sendMessage(t);input.value='';autoResize();}});
-      clearBtn.addEventListener('click',function(){if(confirm('Clear conversation?'))clearConversation();});
       settingsBtn.addEventListener('click',openSettings);
       settingsSave.addEventListener('click',doSaveSettings);
       settingsCancel.addEventListener('click',closeSettings);
       document.getElementById('settings-overlay').addEventListener('click',function(e){
         if(e.target===this)closeSettings();
       });
+
+      // Conversation management
+      convSelector.addEventListener('click', function(e) { e.stopPropagation(); toggleConvDropdown(); });
+      newConvBtn.addEventListener('click', function() {
+        if (messages.length === 0) {
+          closeConvDropdown();
+          return;
+        }
+        createConversation('New Chat');
+        var container = document.getElementById('chat-container');
+        container.innerHTML = '';
+        showWelcome();
+        updateConvSelector();
+        closeConvDropdown();
+      });
+      convDropdown.addEventListener('click', function(e) {
+        var convId = e.target.getAttribute('data-conv-id');
+        if (!convId) {
+          // Check parent
+          var parent = e.target.closest('.conv-item');
+          if (parent) convId = parent.getAttribute('data-conv-id');
+        }
+        if (!convId) return;
+        if (e.target.classList.contains('conv-item-delete')) {
+          e.stopPropagation();
+          if (confirm('Delete this conversation?')) {
+            deleteConversation(convId);
+            var container = document.getElementById('chat-container');
+            if (messages.length > 0) {
+              container.innerHTML = '';
+              renderAllMessages();
+            } else {
+              showWelcome();
+            }
+            updateConvSelector();
+            renderConvDropdown();
+          }
+        } else {
+          // Switch to selected conversation
+          switchConversation(convId);
+          var container = document.getElementById('chat-container');
+          container.innerHTML = '';
+          if (messages.length > 0) {
+            renderAllMessages();
+          } else {
+            showWelcome();
+          }
+          updateConvSelector();
+          closeConvDropdown();
+        }
+      });
+      convBackdrop.addEventListener('click', closeConvDropdown);
     }
 
     async function initPlugin() {
       setupEventListeners();
       var hasConfig = await loadConfig();
       updateModelBadge();
+
+      // Migrate old single-conversation format if needed
+      await migrateOldFormat();
+
       if (!hasConfig) {
         showConfigWarning();
+        updateConvSelector();
       } else {
-        var hasConv = await loadConversation();
-        if (!hasConv) showWelcome();
+        var hasConversations = await loadConversations();
+        if (!hasConversations || !conversations || conversations.list.length === 0) {
+          createConversation('New Chat');
+          showWelcome();
+        } else {
+          var active = getActiveConv();
+          if (active && active.messages && active.messages.length > 0) {
+            renderAllMessages();
+          } else {
+            showWelcome();
+          }
+        }
+        updateConvSelector();
       }
     }
 
