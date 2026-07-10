@@ -80,17 +80,45 @@ Supports any OpenAI-compatible API (DeepSeek, Claude via proxy, local models, et
 
 ### Build / Package
 
+The verified packaging environment is Linux x86_64 with Python 3.12.13, using Python's standard-library `zipfile` module with `ZIP_DEFLATED` compression. The package contains exactly these root files:
+
+- `manifest.json`
+- `plugin.js`
+- `index.html`
+- `icon.svg`
+
+Build locally on Linux/macOS:
+
 ```bash
-cd ~/server/ai-assistant-plugin && python3 -c "
-import zipfile
-with zipfile.ZipFile('ai-assistant-plugin.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
-    for f in ['manifest.json', 'plugin.js', 'index.html', 'icon.svg']:
-        zf.write(f, f)
-        print(f'  added: {f}')
-"
+scripts/build-release.sh v1.7.0 linux x64 dist/release
 ```
 
-Output: `ai-assistant-plugin.zip` in the project root.
+Build locally on Windows PowerShell:
+
+```powershell
+scripts/build-release.ps1 -Version v1.7.0 -OsName windows -ArchName x64 -OutDir dist/release
+```
+
+Output naming format:
+
+```text
+<repo-name>-<version>-<os>-<arch>.zip
+```
+
+For example:
+
+```text
+ai-assistant-plugin-v1.7.0-linux-x64.zip
+```
+
+### GitHub Actions Release
+
+Use **Actions → Build and publish release → Run workflow** and provide:
+
+- `version`: release tag such as `v1.7.0`
+- `prerelease`: whether to publish as a prerelease
+
+The workflow builds the ZIP on `ubuntu-latest` with Python 3.12.13, verifies the archive, uploads it as an Actions artifact, creates/updates the Git tag, and publishes the ZIP plus SHA256 file as GitHub Release assets using the built-in `GITHUB_TOKEN`.
 
 ## Requirements
 

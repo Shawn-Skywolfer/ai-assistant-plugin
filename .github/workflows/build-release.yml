@@ -1,0 +1,126 @@
+name: Build and publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, for example v0.1.0'
+        required: true
+        type: string
+      prerelease:
+        description: 'Publish as a prerelease'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build release ZIP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+
+      - name: Normalize release inputs
+        id: release
+        shell: bash
+        run: |
+          version='${{ inputs.version }}'
+          if [[ "$version" != v* ]]; then
+            version="v$version"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Show build environment
+        run: |
+          uname -a
+          python3 --version
+          python3 - <<'PY'
+          import platform, sys, zipfile
+          print(sys.version)
+          print(platform.platform())
+          print(zipfile.__file__)
+          PY
+
+      - name: Run static checks
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          HTMLParser().feed(Path('index.html').read_text(encoding='utf-8'))
+          print('html parser ok')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path('index.html').read_text(encoding='utf-8')
+          start = html.index('<script>') + len('<script>')
+          end = html.index('</script>', start)
+          Path('/tmp/index-script.js').write_text(html[start:end], encoding='utf-8')
+          PY
+          node --check /tmp/index-script.js
+
+      - name: Build release ZIP
+        run: |
+          scripts/build-release.sh '${{ steps.release.outputs.version }}' linux x64 dist/release
+
+      - name: Verify ZIP contents
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip_path="dist/release/${GITHUB_REPOSITORY#*/}-${{ steps.release.outputs.version }}-linux-x64.zip"
+          test -f "$zip_path"
+          unzip -t "$zip_path"
+          for required in manifest.json plugin.js index.html icon.svg; do
+            unzip -l "$zip_path" | grep -q " $required$"
+          done
+          sha256sum "$zip_path" > "$zip_path.sha256"
+          echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$(basename "$zip_path")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip_name }}
+          path: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.zip_path }}.sha256
+          if-no-files-found: error
+
+      - name: Create or update Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f '${{ steps.release.outputs.version }}' "$GITHUB_SHA"
+          git push -f origin '${{ steps.release.outputs.version }}'
+
+      - name: Create GitHub Release and upload ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease_flag=""
+          if [[ '${{ inputs.prerelease }}' == 'true' ]]; then
+            prerelease_flag="--prerelease"
+          fi
+          if gh release view '${{ steps.release.outputs.version }}' >/dev/null 2>&1; then
+            gh release upload '${{ steps.release.outputs.version }}' \
+              '${{ steps.package.outputs.zip_path }}' \
+              '${{ steps.package.outputs.zip_path }}.sha256' \
+              --clobber
+          else
+            gh release create '${{ steps.release.outputs.version }}' \
+              '${{ steps.package.outputs.zip_path }}' \
+              '${{ steps.package.outputs.zip_path }}.sha256' \
+              --title '${{ steps.release.outputs.version }}' \
+              --notes "Automated Super Productivity plugin release for ${{ steps.release.outputs.version }}." \
+              $prerelease_flag
+          fi
