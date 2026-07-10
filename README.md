@@ -12,7 +12,10 @@ An OpenAI-powered AI assistant plugin that lets you manage tasks, projects, and 
 - 📊 Worklog reports: time per day/project/tag, estimate accuracy
 - 🔄 Agentic tool calling — AI auto-executes operations (up to 5 rounds)
 - 📝 Markdown rendering for AI responses (headers, tables, code blocks, lists)
-- ⚙️ Configurable: API key, base URL, model, temperature
+- ⚙️ Configurable: API key, base URL, model, temperature, agent role
+- 🔎 Test API connectivity and fetch/filter remote model lists
+- 📎 Attach, paste, or drop text files and images into chat
+- 📋 Copy sent/received messages and quickly edit/retry sent prompts
 
 ## Installation
 
@@ -29,9 +32,10 @@ Click the ⚙️ button in the top-right corner of the plugin panel:
 |-------|---------|-------------|
 | API Key | *(required)* | Your OpenAI API key |
 | Base URL | `https://api.openai.com/v1` | OpenAI-compatible endpoint |
-| Model | `gpt-4o` | Model name |
+| Model | `gpt-4o` | Model name, with optional remote fetch/filter/select |
 | Max Tokens | `4096` | Max response tokens |
 | Temperature | `0.7` | Response creativity (0-2) |
+| Agent Role | `Task Manager` | Preset or custom system instructions appended to the base assistant rules |
 
 Supports any OpenAI-compatible API (DeepSeek, Claude via proxy, local models, etc.)
 
@@ -76,17 +80,45 @@ Supports any OpenAI-compatible API (DeepSeek, Claude via proxy, local models, et
 
 ### Build / Package
 
+The verified packaging environment is Linux x86_64 with Python 3.12.13, using Python's standard-library `zipfile` module with `ZIP_DEFLATED` compression. The package contains exactly these root files:
+
+- `manifest.json`
+- `plugin.js`
+- `index.html`
+- `icon.svg`
+
+Build locally on Linux/macOS:
+
 ```bash
-cd ~/server/ai-assistant-plugin && python3 -c "
-import zipfile
-with zipfile.ZipFile('ai-assistant-plugin.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
-    for f in ['manifest.json', 'plugin.js', 'index.html', 'icon.svg']:
-        zf.write(f, f)
-        print(f'  added: {f}')
-"
+scripts/build-release.sh v1.7.0 linux x64 dist/release
 ```
 
-Output: `ai-assistant-plugin.zip` in the project root.
+Build locally on Windows PowerShell:
+
+```powershell
+scripts/build-release.ps1 -Version v1.7.0 -OsName windows -ArchName x64 -OutDir dist/release
+```
+
+Output naming format:
+
+```text
+<repo-name>-<version>-<os>-<arch>.zip
+```
+
+For example:
+
+```text
+ai-assistant-plugin-v1.7.0-linux-x64.zip
+```
+
+### GitHub Actions Release
+
+Use **Actions → Build and publish release → Run workflow** and provide:
+
+- `version`: release tag such as `v1.7.0`
+- `prerelease`: whether to publish as a prerelease
+
+The workflow builds the ZIP on `ubuntu-latest` with Python 3.12.13, verifies the archive, uploads it as an Actions artifact, creates/updates the Git tag, and publishes the ZIP plus SHA256 file as GitHub Release assets using the built-in `GITHUB_TOKEN`.
 
 ## Requirements
 
