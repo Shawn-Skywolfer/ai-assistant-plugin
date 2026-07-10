@@ -140,8 +140,8 @@
     .input-area textarea {
       flex: 1; background: var(--chat-bg); border: 1px solid var(--chat-border);
       border-radius: 10px; padding: 10px 12px; color: var(--chat-text);
-      font-size: 13px; font-family: inherit; resize: none;
-      min-height: 40px; max-height: 120px; outline: none; line-height: 1.4;
+      font-size: 13px; font-family: inherit; resize: vertical; overflow-y: auto;
+      min-height: 40px; max-height: 45vh; outline: none; line-height: 1.4;
     }
     .input-area textarea:focus { border-color: var(--chat-primary); }
     .input-area textarea::placeholder { color: var(--chat-text-muted); }
@@ -194,6 +194,33 @@
     .btn-cancel { background: var(--chat-bg); color: var(--chat-text); border: 1px solid var(--chat-border) !important; }
     .btn-save { background: var(--chat-primary); color: #fff; }
     .model-info { font-size: 11px; color: var(--chat-text-muted); margin-top: 2px; }
+    .settings-row { display: flex; gap: 8px; align-items: center; }
+    .settings-row button, .attachment-btn {
+      padding: 8px 10px; border-radius: 6px; border: 1px solid var(--chat-border);
+      background: var(--chat-bg); color: var(--chat-text); cursor: pointer; font-size: 12px;
+    }
+    .settings-row button:hover, .attachment-btn:hover { border-color: var(--chat-primary); color: var(--chat-primary); }
+    .settings-field textarea {
+      width: 100%; min-height: 72px; resize: vertical; padding: 8px 10px; background: var(--chat-bg);
+      border: 1px solid var(--chat-border); border-radius: 6px; color: var(--chat-text);
+      font-size: 13px; font-family: inherit; outline: none;
+    }
+    .settings-field textarea:focus { border-color: var(--chat-primary); }
+    .settings-status { font-size: 11px; color: var(--chat-text-muted); min-height: 16px; margin-top: 6px; }
+    .settings-status.success { color: var(--chat-accent); }
+    .settings-status.error { color: var(--chat-warn); }
+    .message-actions { display: flex; gap: 4px; margin-top: 4px; padding: 0 4px; opacity: 0.35; transition: opacity 0.12s; }
+    .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
+    .message-action-btn { background: var(--chat-surface); border: 1px solid var(--chat-border); color: var(--chat-text-muted); cursor: pointer; border-radius: 12px; padding: 3px 8px; font-size: 10px; }
+    .message-action-btn:hover { color: var(--chat-primary); border-color: var(--chat-primary); }
+    .attachment-btn { width: 40px; height: 40px; flex-shrink: 0; font-size: 16px; }
+    .input-stack { display: flex; flex-direction: column; flex: 1; gap: 6px; }
+    .attachment-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .attachment-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border: 1px solid var(--chat-border); border-radius: 14px; background: rgba(255,255,255,0.04); font-size: 11px; color: var(--chat-text-muted); }
+    .attachment-chip button { border: none; background: none; color: var(--chat-text-muted); cursor: pointer; }
+    .attachment-summary { margin-top: 6px; font-size: 11px; color: var(--chat-text-muted); }
+    .drop-active .input-area { box-shadow: inset 0 0 0 2px var(--chat-primary); }
+
 
     /* Conversation selector */
     .conv-selector {
@@ -292,7 +319,12 @@
   <div id="chat-container" class="chat-container"></div>
 
   <div class="input-area">
-    <textarea id="input" placeholder="Ask me anything about your tasks..." rows="1"></textarea>
+    <button id="attachment-btn" class="attachment-btn" title="Attach files" aria-label="Attach files">📎</button>
+    <input id="file-input" type="file" multiple hidden />
+    <div class="input-stack">
+      <div id="attachment-list" class="attachment-list"></div>
+      <textarea id="input" placeholder="Ask me anything about your tasks, or paste/drop files..." rows="1"></textarea>
+    </div>
     <button id="send-btn" class="send-btn" title="Send">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
     </button>
@@ -312,8 +344,19 @@
         <div class="model-info">OpenAI-compatible endpoint (include /v1 if needed)</div>
       </div>
       <div class="settings-field">
+        <label>API Tools</label>
+        <div class="settings-row">
+          <button type="button" id="test-api-btn">Test API</button>
+          <button type="button" id="fetch-models-btn">Fetch Models</button>
+        </div>
+        <div id="settings-status" class="settings-status"></div>
+      </div>
+      <div class="settings-field">
         <label>Model</label>
-        <input type="text" id="cfg-model" placeholder="gpt-4o" />
+        <input type="text" id="cfg-model-filter" placeholder="Filter fetched models..." />
+        <select id="cfg-model-select"><option value="">No fetched models</option></select>
+        <input type="text" id="cfg-model" placeholder="gpt-4o or custom model id" />
+        <div id="cfg-model-info" class="model-info">Fetch models to choose from remote API.</div>
       </div>
       <div class="settings-field">
         <label>Max Tokens</label>
@@ -322,6 +365,18 @@
       <div class="settings-field">
         <label>Temperature</label>
         <input type="number" id="cfg-temperature" placeholder="0.7" min="0" max="2" step="0.1" />
+      </div>
+      <div class="settings-field">
+        <label>Agent Role</label>
+        <select id="cfg-agent-role">
+          <option value="task_manager">Task Manager</option>
+          <option value="planner">Planning Coach</option>
+          <option value="executor">Strict Executor</option>
+          <option value="readonly">Read-only Analyst</option>
+          <option value="custom">Custom</option>
+        </select>
+        <textarea id="cfg-agent-prompt" placeholder="Optional custom instructions for this agent..."></textarea>
+        <div class="model-info">Base safety/tool-use rules are always kept.</div>
       </div>
       <div class="settings-actions">
         <button class="btn-cancel" id="settings-cancel">Cancel</button>
@@ -342,6 +397,9 @@
     var messages = [];          // live reference to active conversation's messages
     var isProcessing = false;
     var currentTaskId = null;
+    var fetchedModels = [];
+    var pendingAttachments = [];
+    var lastSentDraft = null;
 
     // ==================== CONFIG PERSISTENCE ====================
     async function loadConfig() {
@@ -399,7 +457,8 @@
       // Sync messages back to active conversation
       var active = getActiveConv();
       if (active) {
-        active.messages = messages.slice(-MAX_MESSAGES);
+        active.messages = trimMessagesForStorage(messages);
+        messages = active.messages;
         active.updatedAt = Date.now();
       }
       try {
@@ -495,7 +554,7 @@
       if (active.title === 'New Chat' || active.title === 'Previous Chat') {
         for (var i = 0; i < messages.length; i++) {
           if (messages[i].role === 'user') {
-            var text = messages[i].content.split('\n\n---\n[App Context]')[0].trim();
+            var text = userTextFromContent(messages[i].content).trim();
             if (!text) return;
             var title = text.slice(0, 40);
             if (title.length < text.length) title += '...';
@@ -539,8 +598,8 @@
       for (var i = 0; i < messages.length; i++) {
         var m = messages[i];
         if (m.role === 'user') {
-          var text = m.content.split('\n\n---\n[App Context]')[0];
-          displayMessage('user', text);
+          var text = userTextFromContent(m.content);
+          displayMessage('user', text, userAttachmentsFromContent(m.content));
         } else if (m.role === 'assistant' && m.content) {
           displayMessage('assistant', m.content);
         }
@@ -548,56 +607,156 @@
     }
 
     // ==================== SETTINGS UI ====================
+    var AGENT_ROLE_PROMPTS = {
+      task_manager: 'Act as a practical task management assistant. Be concise and optimize for accurate task/project/tag operations.',
+      planner: 'Act as a planning coach. Help prioritize, break work down, and explain tradeoffs before making changes.',
+      executor: 'Act as a strict executor. Ask clarifying questions when needed, then perform only the requested app operations.',
+      readonly: 'Act as a read-only analyst. Do not call mutating tools unless the user explicitly confirms the exact change.',
+      custom: ''
+    };
+
+    function setSettingsStatus(msg, type) {
+      var el = document.getElementById('settings-status');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.className = 'settings-status' + (type ? ' ' + type : '');
+    }
+
     function openSettings() {
       document.getElementById('cfg-apiKey').value = (config && config.apiKey) || '';
       document.getElementById('cfg-baseUrl').value = (config && config.baseUrl) || 'https://api.openai.com/v1';
       document.getElementById('cfg-model').value = (config && config.model) || 'gpt-4o';
       document.getElementById('cfg-maxTokens').value = (config && config.maxTokens) || 4096;
       document.getElementById('cfg-temperature').value = (config && config.temperature !== undefined) ? config.temperature : 0.7;
+      document.getElementById('cfg-agent-role').value = (config && config.agentRole) || 'task_manager';
+      document.getElementById('cfg-agent-prompt').value = (config && config.agentPrompt) || '';
+      fetchedModels = (config && config.availableModelsCache) || [];
+      renderModelOptions();
+      setSettingsStatus('', '');
       document.getElementById('settings-overlay').classList.remove('hidden');
     }
 
-    function closeSettings() {
-      document.getElementById('settings-overlay').classList.add('hidden');
-    }
+    function closeSettings() { document.getElementById('settings-overlay').classList.add('hidden'); }
 
-    function doSaveSettings() {
+    function getSettingsDraftConfig() {
       var cfg = {
         apiKey: document.getElementById('cfg-apiKey').value.trim(),
         baseUrl: document.getElementById('cfg-baseUrl').value.trim() || 'https://api.openai.com/v1',
         model: document.getElementById('cfg-model').value.trim() || 'gpt-4o',
         maxTokens: parseInt(document.getElementById('cfg-maxTokens').value) || 4096,
         temperature: parseFloat(document.getElementById('cfg-temperature').value),
+        agentRole: document.getElementById('cfg-agent-role').value || 'task_manager',
+        agentPrompt: document.getElementById('cfg-agent-prompt').value.trim(),
+        availableModelsCache: fetchedModels,
+        lastModelFetchAt: config && config.lastModelFetchAt,
+        modelMetadata: config && config.modelMetadata
       };
       if (isNaN(cfg.temperature)) cfg.temperature = 0.7;
+      return cfg;
+    }
 
-      if (!cfg.apiKey) {
-        alert('API Key is required');
-        return;
-      }
-
-      saveConfig(cfg);
-      closeSettings();
-
-      // Refresh the view
-      var container = document.getElementById('chat-container');
-      if (messages.length > 0) {
-        // Already have conversation
-      } else {
-        showWelcome();
-      }
+    function doSaveSettings() {
+      var cfg = getSettingsDraftConfig();
+      if (!cfg.apiKey) { alert('API Key is required'); return; }
+      var selected = getSelectedModelMeta(cfg.model);
+      if (selected) cfg.modelMetadata = selected;
+      saveConfig(cfg); closeSettings();
+      if (messages.length === 0) showWelcome();
       showSnack('Settings saved!');
     }
 
     function updateModelBadge() {
       var badge = document.getElementById('model-badge');
       if (config && config.model) {
-        badge.textContent = '(' + config.model + ')';
-      } else {
-        badge.textContent = '';
+        var role = config.agentRole && config.agentRole !== 'task_manager' ? ' · ' + config.agentRole : '';
+        badge.textContent = '(' + config.model + role + ')';
+      } else badge.textContent = '';
+    }
+
+    function normalizeBaseUrl(url) { return (url || 'https://api.openai.com/v1').replace(/\/+$/, ''); }
+    function authHeaders(cfg) { return {'Content-Type':'application/json','Authorization':'Bearer '+cfg.apiKey}; }
+
+    async function testApiConnection() {
+      var cfg = getSettingsDraftConfig();
+      if (!cfg.apiKey) { setSettingsStatus('API key is required.', 'error'); return; }
+      setSettingsStatus('Testing API...', '');
+      try {
+        var baseUrl = normalizeBaseUrl(cfg.baseUrl);
+        var resp = await fetch(baseUrl + '/models', {headers: authHeaders(cfg)});
+        if (!resp.ok) throw new Error('Models endpoint returned ' + resp.status);
+        setSettingsStatus('API connection OK.', 'success');
+      } catch (e) {
+        setSettingsStatus('API test failed: ' + (e.message || e), 'error');
       }
     }
 
+    async function fetchAvailableModels() {
+      var cfg = getSettingsDraftConfig();
+      if (!cfg.apiKey) { setSettingsStatus('API key is required.', 'error'); return; }
+      setSettingsStatus('Fetching models...', '');
+      try {
+        var resp = await fetch(normalizeBaseUrl(cfg.baseUrl) + '/models', {headers: authHeaders(cfg)});
+        if (!resp.ok) { var t = await resp.text(); throw new Error('API ' + resp.status + ': ' + t.slice(0, 180)); }
+        var data = await resp.json();
+        var raw = Array.isArray(data.data) ? data.data : (Array.isArray(data.models) ? data.models : []);
+        fetchedModels = raw.map(function(m){ return typeof m === 'string' ? {id:m} : m; }).filter(function(m){ return m && m.id; });
+        if (!fetchedModels.length) throw new Error('No models found in response.');
+        renderModelOptions();
+        config = Object.assign({}, config || {}, {availableModelsCache:fetchedModels,lastModelFetchAt:Date.now()});
+        setSettingsStatus('Fetched ' + fetchedModels.length + ' models.', 'success');
+      } catch(e) { setSettingsStatus('Fetch failed: ' + (e.message || e), 'error'); }
+    }
+
+    function getSelectedModelMeta(modelId) {
+      for (var i=0;i<fetchedModels.length;i++) if (fetchedModels[i].id === modelId) return fetchedModels[i];
+      return null;
+    }
+
+    function inferModelContext(meta) {
+      if (!meta) return null;
+      var keys = ['context_length','max_context_length','contextWindow','max_input_tokens','input_token_limit','max_tokens'];
+      for (var i=0;i<keys.length;i++) if (meta[keys[i]]) return parseInt(meta[keys[i]]);
+      var id = (meta.id || '').toLowerCase();
+      if (id.indexOf('gpt-4.1') >= 0 || id.indexOf('gpt-4o') >= 0) return 128000;
+      if (id.indexOf('gpt-4') >= 0) return 8192;
+      if (id.indexOf('gpt-3.5') >= 0) return 16385;
+      if (id.indexOf('claude') >= 0) return 200000;
+      return null;
+    }
+
+    function renderModelOptions() {
+      var sel = document.getElementById('cfg-model-select');
+      if (!sel) return;
+      var filter = (document.getElementById('cfg-model-filter').value || '').toLowerCase();
+      var current = document.getElementById('cfg-model').value;
+      sel.innerHTML = '';
+      var list = fetchedModels.filter(function(m){ return !filter || m.id.toLowerCase().indexOf(filter) >= 0; });
+      if (!list.length) {
+        var opt = document.createElement('option'); opt.value=''; opt.textContent = fetchedModels.length ? 'No matching models' : 'No fetched models'; sel.appendChild(opt);
+      } else {
+        list.slice(0, 300).forEach(function(m){ var opt=document.createElement('option'); opt.value=m.id; opt.textContent=m.id; if(m.id===current) opt.selected=true; sel.appendChild(opt); });
+      }
+      updateModelInfo();
+    }
+
+    function updateModelInfo() {
+      var model = document.getElementById('cfg-model').value.trim();
+      var meta = getSelectedModelMeta(model);
+      var ctx = inferModelContext(meta || {id:model});
+      var info = document.getElementById('cfg-model-info');
+      if (info) info.textContent = ctx ? ('Estimated context window: ' + ctx.toLocaleString() + ' tokens') : 'Context window unknown for this model.';
+      if (ctx) {
+        var max = document.getElementById('cfg-maxTokens');
+        if (max && (!max.value || parseInt(max.value) > ctx)) max.value = Math.min(4096, ctx);
+      }
+    }
+
+    function buildSystemPrompt() {
+      var role = (config && config.agentRole) || 'task_manager';
+      var parts = [BASE_SYSTEM_PROMPT, AGENT_ROLE_PROMPTS[role] || ''];
+      if (config && config.agentPrompt) parts.push('User-configured agent instructions:\n' + config.agentPrompt);
+      return parts.filter(Boolean).join('\n\n');
+    }
     // ==================== TOOL DEFINITIONS (aligned with Super-Productivity-MCP) ====================
     var tools = [
       // ---------- TASKS ----------
@@ -947,11 +1106,76 @@
       } catch(e) { return '{"error":"'+e.message+'"}'; }
     }
 
+    // ==================== ATTACHMENTS ====================
+    function formatBytes(bytes){ if(!bytes) return '0 B'; var u=['B','KB','MB','GB']; var i=0; while(bytes>=1024&&i<u.length-1){bytes/=1024;i++;} return bytes.toFixed(i?1:0)+' '+u[i]; }
+    function renderAttachments(){ var list=document.getElementById('attachment-list'); if(!list) return; list.innerHTML=''; pendingAttachments.forEach(function(a,idx){ var chip=document.createElement('span'); chip.className='attachment-chip'; chip.textContent=(a.kind==='image'?'🖼 ':'📄 ')+a.name+' ('+formatBytes(a.size)+')'; var x=document.createElement('button'); x.textContent='×'; x.onclick=function(){pendingAttachments.splice(idx,1);renderAttachments();}; chip.appendChild(x); list.appendChild(chip); }); }
+    function readFileAs(file, mode){ return new Promise(function(resolve,reject){ var r=new FileReader(); r.onload=function(){resolve(r.result);}; r.onerror=function(){reject(r.error);}; if(mode==='data') r.readAsDataURL(file); else r.readAsText(file); }); }
+    function isTextFile(file){ return file.type.indexOf('text/')===0 || /\.(md|txt|json|csv|log|js|ts|html|css|py|java|c|cpp|rs|go|yaml|yml)$/i.test(file.name); }
+    async function handleFiles(files){ for(var i=0;i<files.length;i++){ var f=files[i]; try{ if(f.type.indexOf('image/')===0){ pendingAttachments.push({kind:'image',name:f.name,type:f.type,size:f.size,dataUrl:await readFileAs(f,'data')}); } else if(isTextFile(f)){ var text=await readFileAs(f,'text'); pendingAttachments.push({kind:'text',name:f.name,type:f.type,size:f.size,text:text.slice(0,50000)}); } else { pendingAttachments.push({kind:'unsupported',name:f.name,type:f.type,size:f.size,text:'[Unsupported binary file: '+f.name+']'}); } }catch(e){ displayError('Could not read '+f.name+': '+e.message); } } renderAttachments(); }
+    function attachmentTextSummary(atts){ return atts.map(function(a){ return a.name+' ('+a.kind+', '+formatBytes(a.size)+')'; }).join(', '); }
+    function buildUserContent(userText, atts, ctx){
+      var text = userText + '\n\n---\n[App Context]\n' + ctx;
+      if (!atts || !atts.length) return text;
+      var parts=[{type:'text',text:text+'\n\n---\n[Attachments]\n'+attachmentTextSummary(atts)}];
+      atts.forEach(function(a){ if(a.kind==='image') parts.push({type:'image_url',image_url:{url:a.dataUrl}}); else parts.push({type:'text',text:'\n\n[File: '+a.name+']\n```\n'+(a.text||'')+'\n```'}); });
+      return parts;
+    }
+    function userTextFromContent(content){ if(Array.isArray(content)){ var p=content[0]&&content[0].text||''; return p.split('\n\n---\n[App Context]')[0]; } return (content||'').split('\n\n---\n[App Context]')[0]; }
+    function userAttachmentsFromContent(content){ if(!Array.isArray(content)) return []; return content.slice(1).map(function(p,i){ return {name:p.image_url?'image-'+(i+1):'file-'+(i+1), kind:p.image_url?'image':'text'}; }); }
+
+    function normalizeAssistantMessageForApi(m) {
+      var copy = Object.assign({}, m);
+      if (copy.role === 'assistant' && copy.content == null) copy.content = '';
+      return copy;
+    }
+
+    function sanitizeMessagesForApi(src) {
+      var out = [];
+      for (var i = 0; i < src.length;) {
+        var m = src[i];
+        if (!m || !m.role) { i++; continue; }
+        if (m.role === 'tool') { i++; continue; }
+        if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length) {
+          var required = {};
+          var requiredCount = 0;
+          for (var r = 0; r < m.tool_calls.length; r++) {
+            if (m.tool_calls[r] && m.tool_calls[r].id) { required[m.tool_calls[r].id] = true; requiredCount++; }
+          }
+          var seen = {};
+          var seenCount = 0;
+          var toolMessages = [];
+          var j = i + 1;
+          while (j < src.length && src[j] && src[j].role === 'tool') {
+            var tid = src[j].tool_call_id;
+            if (required[tid] && !seen[tid]) {
+              seen[tid] = true;
+              seenCount++;
+              toolMessages.push(src[j]);
+            }
+            j++;
+          }
+          if (requiredCount > 0 && seenCount === requiredCount) {
+            out.push(normalizeAssistantMessageForApi(m));
+            for (var t = 0; t < toolMessages.length; t++) out.push(toolMessages[t]);
+          }
+          i = j;
+          continue;
+        }
+        out.push(normalizeAssistantMessageForApi(m));
+        i++;
+      }
+      return out;
+    }
+
+    function trimMessagesForStorage(src) {
+      return sanitizeMessagesForApi(sanitizeMessagesForApi(src).slice(-MAX_MESSAGES));
+    }
+
     // ==================== OPENAI API ====================
     async function callOpenAI(msgs) {
       var baseUrl = (config.baseUrl||'https://api.openai.com/v1').replace(/\/+$/,'');
-      var sys = BASE_SYSTEM_PROMPT;
-      var full = [{role:'system',content:sys}].concat(msgs);
+      var sys = buildSystemPrompt();
+      var full = [{role:'system',content:sys}].concat(sanitizeMessagesForApi(msgs));
       var resp = await fetch(baseUrl+'/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+config.apiKey},
@@ -965,14 +1189,19 @@
 
     // ==================== CHAT ====================
     async function sendMessage(userText) {
-      if (!userText.trim() || isProcessing) return;
+      if ((!userText.trim() && pendingAttachments.length === 0) || isProcessing) return;
       if (!config || !config.apiKey) { showConfigWarning(); return; }
 
       isProcessing = true; updateSendBtn();
-      displayMessage('user', userText);
+      var startLen = messages.length;
+      var sentAttachments = pendingAttachments.slice();
+      lastSentDraft = {text:userText,attachments:sentAttachments};
+      displayMessage('user', userText, sentAttachments);
 
       var ctx = await buildContext();
-      messages.push({role:'user',content:userText+'\n\n---\n[App Context]\n'+ctx});
+      var userMsg = {role:'user',content:buildUserContent(userText, sentAttachments, ctx)};
+      messages.push(userMsg);
+      pendingAttachments = []; renderAttachments();
 
       var thinkingEl = showThinking();
       try {
@@ -984,7 +1213,7 @@
           if (!choice) throw new Error('No response');
           var am = choice.message;
           if (am.tool_calls && am.tool_calls.length > 0) {
-            var asstMsg = {role:'assistant',content:am.content||null,tool_calls:am.tool_calls};
+            var asstMsg = {role:'assistant',content:am.content||'',tool_calls:am.tool_calls};
             if(am.reasoning_content) asstMsg.reasoning_content = am.reasoning_content;
             messages.push(asstMsg);
             for (var i=0;i<am.tool_calls.length;i++) {
@@ -1006,7 +1235,7 @@
           }
         }
         if(round>=maxRounds){removeThinking(thinkingEl);if(allActions.length>0)displayActions(allActions);displayMessage('assistant','⚠️ Max rounds reached.');}
-      } catch(e) { removeThinking(thinkingEl); displayError(e.message); }
+      } catch(e) { removeThinking(thinkingEl); messages.splice(startLen); if(lastSentDraft){ pendingAttachments = lastSentDraft.attachments || []; renderAttachments(); } displayError(e.message + ' — use Edit / Retry on your message to resend.'); }
       isProcessing=false; updateSendBtn();
       autoNameConversation();
       updateConvSelector();
@@ -1124,14 +1353,33 @@
     }
 
     // ==================== UI ====================
-    function displayMessage(role,text) {
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+      var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); return Promise.resolve();
+    }
+    function restoreToInput(text) { var input=document.getElementById('input'); input.value=text; input.focus(); autoResize(); }
+    function displayMessage(role,text, attachments) {
       var c=document.getElementById('chat-container');
       var w=c.querySelector('.welcome'); if(w)w.remove();
       var d=document.createElement('div'); d.className='message '+role;
       var b=document.createElement('div'); b.className='msg-bubble';
-      if (role === 'assistant') { b.innerHTML = renderMarkdown(text); }
-      else { b.textContent = text; }
+      if (role === 'assistant') { b.innerHTML = renderMarkdown(text || ''); }
+      else { b.textContent = text || ''; }
       d.appendChild(b);
+      if (attachments && attachments.length) {
+        var sum=document.createElement('div'); sum.className='attachment-summary';
+        sum.textContent='Attachments: '+attachments.map(function(a){return a.name;}).join(', ');
+        b.appendChild(sum);
+      }
+      var actions=document.createElement('div'); actions.className='message-actions';
+      var copy=document.createElement('button'); copy.className='message-action-btn'; copy.textContent='Copy'; copy.title='Copy message';
+      copy.onclick=function(){copyText(text || '').then(function(){copy.textContent='Copied'; setTimeout(function(){copy.textContent='Copy';},1200);});};
+      actions.appendChild(copy);
+      if (role === 'user') {
+        var edit=document.createElement('button'); edit.className='message-action-btn'; edit.textContent='Edit / Retry'; edit.title='Put this message back into the input';
+        edit.onclick=function(){restoreToInput(text || '');}; actions.appendChild(edit);
+      }
+      d.appendChild(actions);
       var t=document.createElement('div'); t.className='msg-time'; t.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); d.appendChild(t);
       c.appendChild(d); c.scrollTop=c.scrollHeight;
     }
@@ -1186,7 +1434,8 @@
       if(text.endsWith(': ')||text.endsWith(':')){} else {sendMessage(text);input.value='';autoResize();}
     }
     function autoResize() {
-      var i=document.getElementById('input'); i.style.height='auto'; i.style.height=Math.min(i.scrollHeight,120)+'px';
+      // Keep this hook for existing callers, but do not override the user's
+      // manual textarea height. The input is intentionally resizable via CSS.
     }
     function updateSendBtn(){document.getElementById('send-btn').disabled=isProcessing;}
     function clearConversation(){
@@ -1263,19 +1512,33 @@
       var newConvBtn=document.getElementById('new-conv-btn');
       var convDropdown=document.getElementById('conv-dropdown');
       var convBackdrop=document.getElementById('conv-dropdown-backdrop');
+      var testApiBtn=document.getElementById('test-api-btn');
+      var fetchModelsBtn=document.getElementById('fetch-models-btn');
+      var modelFilter=document.getElementById('cfg-model-filter');
+      var modelSelect=document.getElementById('cfg-model-select');
+      var modelInput=document.getElementById('cfg-model');
+      var attachmentBtn=document.getElementById('attachment-btn');
+      var fileInput=document.getElementById('file-input');
 
       input.addEventListener('input',autoResize);
       input.addEventListener('keydown',function(e){
-        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();var t=input.value;if(t.trim()){sendMessage(t);input.value='';autoResize();}}
+        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();var t=input.value;if(t.trim()||pendingAttachments.length){sendMessage(t);input.value='';autoResize();}}
       });
-      sendBtn.addEventListener('click',function(){var t=input.value;if(t.trim()){sendMessage(t);input.value='';autoResize();}});
+      sendBtn.addEventListener('click',function(){var t=input.value;if(t.trim()||pendingAttachments.length){sendMessage(t);input.value='';autoResize();}});
       settingsBtn.addEventListener('click',openSettings);
       settingsSave.addEventListener('click',doSaveSettings);
       settingsCancel.addEventListener('click',closeSettings);
-      document.getElementById('settings-overlay').addEventListener('click',function(e){
-        if(e.target===this)closeSettings();
-      });
-
+      testApiBtn.addEventListener('click',testApiConnection);
+      fetchModelsBtn.addEventListener('click',fetchAvailableModels);
+      modelFilter.addEventListener('input',renderModelOptions);
+      modelSelect.addEventListener('change',function(){ if(this.value){ modelInput.value=this.value; updateModelInfo(); }});
+      modelInput.addEventListener('input',updateModelInfo);
+      attachmentBtn.addEventListener('click',function(){fileInput.click();});
+      fileInput.addEventListener('change',function(){handleFiles(this.files); this.value='';});
+      input.addEventListener('paste',function(e){ if(e.clipboardData && e.clipboardData.files && e.clipboardData.files.length){ handleFiles(e.clipboardData.files); }});
+      document.body.addEventListener('dragover',function(e){e.preventDefault(); document.body.classList.add('drop-active');});
+      document.body.addEventListener('dragleave',function(){document.body.classList.remove('drop-active');});
+      document.body.addEventListener('drop',function(e){e.preventDefault(); document.body.classList.remove('drop-active'); if(e.dataTransfer&&e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);});
       // Conversation management
       convSelector.addEventListener('click', function(e) { e.stopPropagation(); toggleConvDropdown(); });
       newConvBtn.addEventListener('click', function() {
