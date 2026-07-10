@@ -1488,10 +1488,6 @@
       document.body.addEventListener('dragover',function(e){e.preventDefault(); document.body.classList.add('drop-active');});
       document.body.addEventListener('dragleave',function(){document.body.classList.remove('drop-active');});
       document.body.addEventListener('drop',function(e){e.preventDefault(); document.body.classList.remove('drop-active'); if(e.dataTransfer&&e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);});
-      document.getElementById('settings-overlay').addEventListener('click',function(e){
-        if(e.target===this)closeSettings();
-      });
-
       // Conversation management
       convSelector.addEventListener('click', function(e) { e.stopPropagation(); toggleConvDropdown(); });
       newConvBtn.addEventListener('click', function() {
