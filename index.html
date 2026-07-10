@@ -457,7 +457,8 @@
       // Sync messages back to active conversation
       var active = getActiveConv();
       if (active) {
-        active.messages = messages.slice(-MAX_MESSAGES);
+        active.messages = trimMessagesForStorage(messages);
+        messages = active.messages;
         active.updatedAt = Date.now();
       }
       try {
@@ -1122,11 +1123,59 @@
     function userTextFromContent(content){ if(Array.isArray(content)){ var p=content[0]&&content[0].text||''; return p.split('\n\n---\n[App Context]')[0]; } return (content||'').split('\n\n---\n[App Context]')[0]; }
     function userAttachmentsFromContent(content){ if(!Array.isArray(content)) return []; return content.slice(1).map(function(p,i){ return {name:p.image_url?'image-'+(i+1):'file-'+(i+1), kind:p.image_url?'image':'text'}; }); }
 
+    function normalizeAssistantMessageForApi(m) {
+      var copy = Object.assign({}, m);
+      if (copy.role === 'assistant' && copy.content == null) copy.content = '';
+      return copy;
+    }
+
+    function sanitizeMessagesForApi(src) {
+      var out = [];
+      for (var i = 0; i < src.length;) {
+        var m = src[i];
+        if (!m || !m.role) { i++; continue; }
+        if (m.role === 'tool') { i++; continue; }
+        if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length) {
+          var required = {};
+          var requiredCount = 0;
+          for (var r = 0; r < m.tool_calls.length; r++) {
+            if (m.tool_calls[r] && m.tool_calls[r].id) { required[m.tool_calls[r].id] = true; requiredCount++; }
+          }
+          var seen = {};
+          var seenCount = 0;
+          var toolMessages = [];
+          var j = i + 1;
+          while (j < src.length && src[j] && src[j].role === 'tool') {
+            var tid = src[j].tool_call_id;
+            if (required[tid] && !seen[tid]) {
+              seen[tid] = true;
+              seenCount++;
+              toolMessages.push(src[j]);
+            }
+            j++;
+          }
+          if (requiredCount > 0 && seenCount === requiredCount) {
+            out.push(normalizeAssistantMessageForApi(m));
+            for (var t = 0; t < toolMessages.length; t++) out.push(toolMessages[t]);
+          }
+          i = j;
+          continue;
+        }
+        out.push(normalizeAssistantMessageForApi(m));
+        i++;
+      }
+      return out;
+    }
+
+    function trimMessagesForStorage(src) {
+      return sanitizeMessagesForApi(sanitizeMessagesForApi(src).slice(-MAX_MESSAGES));
+    }
+
     // ==================== OPENAI API ====================
     async function callOpenAI(msgs) {
       var baseUrl = (config.baseUrl||'https://api.openai.com/v1').replace(/\/+$/,'');
       var sys = buildSystemPrompt();
-      var full = [{role:'system',content:sys}].concat(msgs);
+      var full = [{role:'system',content:sys}].concat(sanitizeMessagesForApi(msgs));
       var resp = await fetch(baseUrl+'/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+config.apiKey},
@@ -1144,6 +1193,7 @@
       if (!config || !config.apiKey) { showConfigWarning(); return; }
 
       isProcessing = true; updateSendBtn();
+      var startLen = messages.length;
       var sentAttachments = pendingAttachments.slice();
       lastSentDraft = {text:userText,attachments:sentAttachments};
       displayMessage('user', userText, sentAttachments);
@@ -1163,7 +1213,7 @@
           if (!choice) throw new Error('No response');
           var am = choice.message;
           if (am.tool_calls && am.tool_calls.length > 0) {
-            var asstMsg = {role:'assistant',content:am.content||null,tool_calls:am.tool_calls};
+            var asstMsg = {role:'assistant',content:am.content||'',tool_calls:am.tool_calls};
             if(am.reasoning_content) asstMsg.reasoning_content = am.reasoning_content;
             messages.push(asstMsg);
             for (var i=0;i<am.tool_calls.length;i++) {
@@ -1185,7 +1235,7 @@
           }
         }
         if(round>=maxRounds){removeThinking(thinkingEl);if(allActions.length>0)displayActions(allActions);displayMessage('assistant','⚠️ Max rounds reached.');}
-      } catch(e) { removeThinking(thinkingEl); if(messages[messages.length-1] === userMsg) messages.pop(); if(lastSentDraft){ pendingAttachments = lastSentDraft.attachments || []; renderAttachments(); } displayError(e.message + ' — use Edit / Retry on your message to resend.'); }
+      } catch(e) { removeThinking(thinkingEl); messages.splice(startLen); if(lastSentDraft){ pendingAttachments = lastSentDraft.attachments || []; renderAttachments(); } displayError(e.message + ' — use Edit / Retry on your message to resend.'); }
       isProcessing=false; updateSendBtn();
       autoNameConversation();
       updateConvSelector();
