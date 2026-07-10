@@ -134,13 +134,22 @@
     .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes bounce { 0%,60%,100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
     .input-area {
-      display: flex; align-items: flex-end; gap: 8px; padding: 10px 12px;
+      display: flex; align-items: flex-end; gap: 8px; padding: 14px 12px 10px;
       border-top: 1px solid var(--chat-border); background: var(--chat-surface); flex-shrink: 0;
+      position: relative;
     }
+    .input-resize-handle {
+      position: absolute; top: 0; left: 0; right: 0; height: 10px;
+      cursor: ns-resize; touch-action: none; display: flex; align-items: center; justify-content: center;
+    }
+    .input-resize-handle::after {
+      content: ''; width: 44px; height: 3px; border-radius: 999px; background: var(--chat-border);
+    }
+    .input-resize-handle:hover::after, .input-resize-handle.resizing::after { background: var(--chat-primary); }
     .input-area textarea {
       flex: 1; background: var(--chat-bg); border: 1px solid var(--chat-border);
       border-radius: 10px; padding: 10px 12px; color: var(--chat-text);
-      font-size: 13px; font-family: inherit; resize: vertical; overflow-y: auto;
+      font-size: 13px; font-family: inherit; resize: none; overflow-y: auto;
       min-height: 40px; max-height: 45vh; outline: none; line-height: 1.4;
     }
     .input-area textarea:focus { border-color: var(--chat-primary); }
@@ -319,6 +328,7 @@
   <div id="chat-container" class="chat-container"></div>
 
   <div class="input-area">
+    <div id="input-resize-handle" class="input-resize-handle" title="Drag to resize input" aria-hidden="true"></div>
     <button id="attachment-btn" class="attachment-btn" title="Attach files" aria-label="Attach files">📎</button>
     <input id="file-input" type="file" multiple hidden />
     <div class="input-stack">
@@ -1501,6 +1511,33 @@
       titleEl.textContent = active ? active.title : 'AI Assistant';
     }
 
+    function setupInputResizeHandle(handle, input) {
+      if (!handle || !input) return;
+      var startY = 0;
+      var startHeight = 0;
+      function clampHeight(h) {
+        var max = Math.max(120, Math.floor(window.innerHeight * 0.45));
+        return Math.max(40, Math.min(max, h));
+      }
+      function onMove(e) {
+        var next = clampHeight(startHeight + (startY - e.clientY));
+        input.style.height = next + 'px';
+      }
+      function onUp() {
+        handle.classList.remove('resizing');
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+      }
+      handle.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        startY = e.clientY;
+        startHeight = input.getBoundingClientRect().height;
+        handle.classList.add('resizing');
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+      });
+    }
+
     // ==================== INIT ====================
     function setupEventListeners() {
       var input=document.getElementById('input');
@@ -1519,8 +1556,10 @@
       var modelInput=document.getElementById('cfg-model');
       var attachmentBtn=document.getElementById('attachment-btn');
       var fileInput=document.getElementById('file-input');
+      var inputResizeHandle=document.getElementById('input-resize-handle');
 
       input.addEventListener('input',autoResize);
+      setupInputResizeHandle(inputResizeHandle, input);
       input.addEventListener('keydown',function(e){
         if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();var t=input.value;if(t.trim()||pendingAttachments.length){sendMessage(t);input.value='';autoResize();}}
       });
