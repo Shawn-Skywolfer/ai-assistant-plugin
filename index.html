@@ -140,8 +140,8 @@
     .input-area textarea {
       flex: 1; background: var(--chat-bg); border: 1px solid var(--chat-border);
       border-radius: 10px; padding: 10px 12px; color: var(--chat-text);
-      font-size: 13px; font-family: inherit; resize: none;
-      min-height: 40px; max-height: 120px; outline: none; line-height: 1.4;
+      font-size: 13px; font-family: inherit; resize: vertical; overflow-y: auto;
+      min-height: 40px; max-height: 45vh; outline: none; line-height: 1.4;
     }
     .input-area textarea:focus { border-color: var(--chat-primary); }
     .input-area textarea::placeholder { color: var(--chat-text-muted); }
@@ -1384,7 +1384,8 @@
       if(text.endsWith(': ')||text.endsWith(':')){} else {sendMessage(text);input.value='';autoResize();}
     }
     function autoResize() {
-      var i=document.getElementById('input'); i.style.height='auto'; i.style.height=Math.min(i.scrollHeight,120)+'px';
+      // Keep this hook for existing callers, but do not override the user's
+      // manual textarea height. The input is intentionally resizable via CSS.
     }
     function updateSendBtn(){document.getElementById('send-btn').disabled=isProcessing;}
     function clearConversation(){
