@@ -274,6 +274,15 @@
     }
     .conv-dropdown.hidden { display: none; }
     @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    .conv-dropdown-actions {
+      display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--chat-border);
+      background: rgba(255,255,255,0.02);
+    }
+    .conv-dropdown-actions button {
+      flex: 1; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--chat-border);
+      background: var(--chat-bg); color: var(--chat-text); cursor: pointer; font-size: 12px;
+    }
+    .conv-dropdown-actions button:hover { border-color: var(--chat-primary); color: var(--chat-primary); }
     .conv-item {
       display: flex; align-items: center; padding: 10px 12px;
       cursor: pointer; border-left: 3px solid transparent; gap: 8px;
@@ -324,6 +333,7 @@
     <div id="conv-dropdown" class="conv-dropdown hidden"></div>
   </div>
   <div id="conv-dropdown-backdrop" class="conv-dropdown-backdrop hidden"></div>
+  <input id="conv-import-input" type="file" accept="application/json,.json" hidden />
 
   <div id="chat-container" class="chat-container"></div>
 
@@ -1472,11 +1482,87 @@
       else closeConvDropdown();
     }
 
+    function conversationMessageKey(m) {
+      var content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || null);
+      var toolCalls = m.tool_calls ? JSON.stringify(m.tool_calls.map(function(tc){return tc.id + ':' + (tc.function && tc.function.name || '');})) : '';
+      return [m.role || '', content, m.tool_call_id || '', toolCalls].join('|');
+    }
+
+    function mergeConversationMessages(existing, incoming) {
+      var out = (existing || []).slice();
+      var seen = {};
+      for (var i = 0; i < out.length; i++) seen[conversationMessageKey(out[i])] = true;
+      for (var j = 0; j < (incoming || []).length; j++) {
+        var key = conversationMessageKey(incoming[j]);
+        if (!seen[key]) { out.push(incoming[j]); seen[key] = true; }
+      }
+      return trimMessagesForStorage(out);
+    }
+
+    function exportConversations() {
+      var payload = {
+        format: 'ai-assistant-conversations',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        conversations: conversations || {activeId:null,list:[]}
+      };
+      var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'ai-assistant-conversations-' + new Date().toISOString().slice(0,10) + '.json';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+      showSnack('Conversations exported');
+    }
+
+    async function importConversationsFile(file) {
+      if (!file) return;
+      try {
+        var text = await file.text();
+        var payload = JSON.parse(text);
+        var incoming = payload.conversations && payload.conversations.list ? payload.conversations : (payload.list ? payload : null);
+        if (!incoming || !Array.isArray(incoming.list)) throw new Error('Invalid conversation export file');
+        if (!conversations || !conversations.list) conversations = {activeId:null,list:[]};
+        var byId = {};
+        for (var i = 0; i < conversations.list.length; i++) byId[conversations.list[i].id] = conversations.list[i];
+        var added = 0, merged = 0;
+        for (var j = 0; j < incoming.list.length; j++) {
+          var inc = incoming.list[j];
+          if (!inc || !inc.id) continue;
+          if (byId[inc.id]) {
+            byId[inc.id].messages = mergeConversationMessages(byId[inc.id].messages, inc.messages);
+            byId[inc.id].title = byId[inc.id].title || inc.title || 'Imported Chat';
+            byId[inc.id].updatedAt = Math.max(byId[inc.id].updatedAt || 0, inc.updatedAt || 0, Date.now());
+            merged++;
+          } else {
+            inc.title = inc.title || 'Imported Chat';
+            inc.createdAt = inc.createdAt || Date.now();
+            inc.updatedAt = inc.updatedAt || Date.now();
+            inc.messages = trimMessagesForStorage(inc.messages || []);
+            conversations.list.unshift(inc);
+            byId[inc.id] = inc;
+            added++;
+          }
+        }
+        if (!conversations.activeId && conversations.list.length) conversations.activeId = conversations.list[0].id;
+        if (conversations.list.length > MAX_CONVERSATIONS) conversations.list = conversations.list.slice(0, MAX_CONVERSATIONS);
+        var active = getActiveConv();
+        messages = active ? active.messages : [];
+        await saveConversations();
+        if (messages.length > 0) renderAllMessages(); else showWelcome();
+        updateConvSelector(); renderConvDropdown();
+        showSnack('Imported ' + added + ' new, merged ' + merged + ' conversations');
+      } catch(e) { displayError('Import failed: ' + (e.message || e)); }
+    }
+
     function renderConvDropdown() {
       var dd = document.getElementById('conv-dropdown');
       dd.innerHTML = '';
+      var actions = document.createElement('div');
+      actions.className = 'conv-dropdown-actions';
+      actions.innerHTML = '<button type="button" data-conv-action="export">Export Chats</button><button type="button" data-conv-action="import">Import Chats</button>';
+      dd.appendChild(actions);
       if (!conversations || conversations.list.length === 0) {
-        dd.innerHTML = '<div class="conv-dropdown-empty">No conversations</div>';
+        var empty = document.createElement('div'); empty.className = 'conv-dropdown-empty'; empty.textContent = 'No conversations'; dd.appendChild(empty);
         return;
       }
       for (var i = 0; i < conversations.list.length; i++) {
@@ -1549,6 +1635,7 @@
       var newConvBtn=document.getElementById('new-conv-btn');
       var convDropdown=document.getElementById('conv-dropdown');
       var convBackdrop=document.getElementById('conv-dropdown-backdrop');
+      var convImportInput=document.getElementById('conv-import-input');
       var testApiBtn=document.getElementById('test-api-btn');
       var fetchModelsBtn=document.getElementById('fetch-models-btn');
       var modelFilter=document.getElementById('cfg-model-filter');
@@ -1579,6 +1666,7 @@
       document.body.addEventListener('dragleave',function(){document.body.classList.remove('drop-active');});
       document.body.addEventListener('drop',function(e){e.preventDefault(); document.body.classList.remove('drop-active'); if(e.dataTransfer&&e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);});
       // Conversation management
+      convImportInput.addEventListener('change',function(){importConversationsFile(this.files && this.files[0]); this.value='';});
       convSelector.addEventListener('click', function(e) { e.stopPropagation(); toggleConvDropdown(); });
       newConvBtn.addEventListener('click', function() {
         if (messages.length === 0) {
@@ -1593,6 +1681,9 @@
         closeConvDropdown();
       });
       convDropdown.addEventListener('click', function(e) {
+        var action = e.target.getAttribute('data-conv-action');
+        if (action === 'export') { e.stopPropagation(); exportConversations(); return; }
+        if (action === 'import') { e.stopPropagation(); convImportInput.click(); return; }
         var convId = e.target.getAttribute('data-conv-id');
         if (!convId) {
           // Check parent
