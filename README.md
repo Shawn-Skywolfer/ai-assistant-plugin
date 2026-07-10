@@ -12,7 +12,10 @@ An OpenAI-powered AI assistant plugin that lets you manage tasks, projects, and 
 - 📊 Worklog reports: time per day/project/tag, estimate accuracy
 - 🔄 Agentic tool calling — AI auto-executes operations (up to 5 rounds)
 - 📝 Markdown rendering for AI responses (headers, tables, code blocks, lists)
-- ⚙️ Configurable: API key, base URL, model, temperature
+- ⚙️ Configurable: API key, base URL, model, temperature, agent role
+- 🔎 Test API connectivity and fetch/filter remote model lists
+- 📎 Attach, paste, or drop text files and images into chat
+- 📋 Copy sent/received messages and quickly edit/retry sent prompts
 
 ## Installation
 
@@ -29,9 +32,10 @@ Click the ⚙️ button in the top-right corner of the plugin panel:
 |-------|---------|-------------|
 | API Key | *(required)* | Your OpenAI API key |
 | Base URL | `https://api.openai.com/v1` | OpenAI-compatible endpoint |
-| Model | `gpt-4o` | Model name |
+| Model | `gpt-4o` | Model name, with optional remote fetch/filter/select |
 | Max Tokens | `4096` | Max response tokens |
 | Temperature | `0.7` | Response creativity (0-2) |
+| Agent Role | `Task Manager` | Preset or custom system instructions appended to the base assistant rules |
 
 Supports any OpenAI-compatible API (DeepSeek, Claude via proxy, local models, etc.)
 
